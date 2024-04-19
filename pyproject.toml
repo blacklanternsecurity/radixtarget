@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "pyradix"
+version = "1.0.0"
+description = "Check whether an IP address belongs to a cloud provider"
+authors = ["TheTechromancer"]
+license = "GPL-3.0"
+readme = "README.md"
+repository = "https://github.com/blacklanternsecurity/pyradix"
+homepage = "https://github.com/blacklanternsecurity/pyradix"
+
+[tool.poetry.urls]
+"PyPi" = "https://pypi.org/project/pyradix/"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[tool.poetry.group.dev.dependencies]
+black = ">=22.12,<25.0"
+flake8 = ">=6.1,<8.0"
+pytest = "^8.1.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
