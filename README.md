@@ -2,6 +2,10 @@
 
 PyRadix is a performant radix implementation designed for looking up IP addresses, IP networks, and DNS hostnames. It is written in pure python.
 
+Used by:
+- https://github.com/blacklanternsecurity/bbot
+- https://github.com/blacklanternsecurity/cloudcheck
+
 ### Example
 
 ```python
