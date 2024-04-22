@@ -1,12 +1,20 @@
 # RadixTarget
 
-RadixTarget is a performant radix implementation designed for looking up IP addresses, IP networks, and DNS hostnames. Written in pure python.
+RadixTarget is a performant radix implementation designed for quick lookups of IP addresses/networks and DNS hostnames. Written in pure python.
 
 Used by:
 - [BBOT (Bighuge BLS OSINT Tool)](https://github.com/blacklanternsecurity/bbot)
 - [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
 
-### Example
+### Speed Benchmark
+
+### Installation
+
+```bash
+pip install radixtarget
+```
+
+### Example Usage
 
 ```python
 from radixtarget import RadixTarget

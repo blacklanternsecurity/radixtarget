@@ -19,6 +19,11 @@ black = ">=22.12,<25.0"
 flake8 = ">=6.1,<8.0"
 pytest = "^8.1.1"
 
+[tool.poetry-dynamic-versioning]
+enable = true
+metadata = false
+format-jinja = 'v1.0.0.{{ distance }}'
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
