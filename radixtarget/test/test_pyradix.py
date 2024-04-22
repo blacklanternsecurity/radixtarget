@@ -66,6 +66,9 @@ def test_radixtarget():
         rt.insert("evilcorp.co.uk", "custom_data")
         assert rt.search("www.evilcorp.co.uk") == "custom_data"
 
+        assert "net" in rt.dns_tree.root.children
+        assert "com" in rt.dns_tree.root.children
+
         # speed benchmark
         cidrs = open(cidr_list_path).read().splitlines()
         log.critical(len(cidrs))

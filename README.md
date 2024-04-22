@@ -23,12 +23,12 @@ rt = RadixTarget()
 
 # IPv4
 rt.insert("192.168.1.0/24")
-rt.search("192.168.1.10") # ipaddress.ip_network("192.168.1.0/24")
+rt.search("192.168.1.10") # IPv4Network("192.168.1.0/24")
 rt.search("192.168.2.10") # None
 
 # ipv6
 rt.insert("dead::/64")
-rt.search("dead::beef") # ipaddress.ip_network("dead::/64")
+rt.search("dead::beef") # IPv6Network("dead::/64")
 rt.search("dead:cafe::beef") # None
 
 # DNS
