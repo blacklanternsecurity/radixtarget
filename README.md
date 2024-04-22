@@ -6,7 +6,7 @@ Used by:
 - [BBOT (Bighuge BLS OSINT Tool)](https://github.com/blacklanternsecurity/bbot)
 - [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
 
-### Installation
+### Installation ([PyPi](https://pypi.org/project/radixtarget/))
 
 ```bash
 pip install radixtarget
