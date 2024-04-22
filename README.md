@@ -35,10 +35,13 @@ rt.search("dead:cafe::beef") # None
 rt.insert("net")
 rt.insert("www.example.com")
 rt.insert("test.www.example.com")
-
 rt.search("net") # "net"
 rt.search("evilcorp.net") # "net"
 rt.search("www.example.com") # "www.example.com"
 rt.search("asdf.test.www.example.com") # "test.www.example.com"
 rt.search("example.com") # None
+
+# Custom data nodes
+rt.insert("evilcorp.co.uk", "custom_data")
+rt.search("www.evilcorp.co.uk") # "custom_data"
 ```
