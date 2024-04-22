@@ -1,5 +1,4 @@
 import time
-import pytest
 import random
 import logging
 import ipaddress
