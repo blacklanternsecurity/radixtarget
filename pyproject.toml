@@ -1,15 +1,15 @@
 [tool.poetry]
-name = "pyradix"
-version = "1.0.0"
+name = "radixtarget"
+version = "0.0.9"
 description = "Check whether an IP address belongs to a cloud provider"
 authors = ["TheTechromancer"]
 license = "GPL-3.0"
 readme = "README.md"
-repository = "https://github.com/blacklanternsecurity/pyradix"
-homepage = "https://github.com/blacklanternsecurity/pyradix"
+repository = "https://github.com/blacklanternsecurity/radixtarget"
+homepage = "https://github.com/blacklanternsecurity/radixtarget"
 
 [tool.poetry.urls]
-"PyPi" = "https://pypi.org/project/pyradix/"
+"PyPi" = "https://pypi.org/project/radixtarget/"
 
 [tool.poetry.dependencies]
 python = "^3.9"

@@ -5,15 +5,15 @@ import logging
 import ipaddress
 from pathlib import Path
 
-log = logging.getLogger("pyradix.test")
+log = logging.getLogger("radixtarget.test")
 
 cidr_list_path = Path(__file__).parent / "cidrs.txt"
 
-from pyradix import RadixTree
+from radixtarget import RadixTarget
 
 
-def test_pyradix():
-    rt = RadixTree()
+def test_radixtarget():
+    rt = RadixTarget()
 
     # ipv4
     rt.insert("192.168.1.0/24")
@@ -62,7 +62,7 @@ def test_pyradix():
     # speed benchmark
     cidrs = open(cidr_list_path).read().splitlines()
     log.critical(len(cidrs))
-    rt = RadixTree()
+    rt = RadixTarget()
     for c in cidrs:
         rt.insert(c)
 

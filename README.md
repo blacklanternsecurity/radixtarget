@@ -1,17 +1,17 @@
-# PyRadix
+# RadixTarget
 
-PyRadix is a performant radix implementation designed for looking up IP addresses, IP networks, and DNS hostnames. It is written in pure python.
+RadixTarget is a performant radix implementation designed for looking up IP addresses, IP networks, and DNS hostnames. Written in pure python.
 
 Used by:
-- https://github.com/blacklanternsecurity/bbot
-- https://github.com/blacklanternsecurity/cloudcheck
+- [BBOT (Bighuge BLS OSINT Tool)](https://github.com/blacklanternsecurity/bbot)
+- [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
 
 ### Example
 
 ```python
-from pyradix import RadixTree
+from radixtarget import RadixTarget
 
-rt = RadixTree()
+rt = RadixTarget()
 
 # IPv4
 rt.insert("192.168.1.0/24")
