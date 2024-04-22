@@ -27,8 +27,7 @@ class RadixTarget:
         try:
             return ipaddress.ip_network(host)
         except Exception:
-            return str(host)
+            return str(host).lower()
 
     def is_ip(self, host):
-        version = getattr(host, "version", 0)
-        return version == 4 or version == 6
+        return ipaddress._IPAddressBase in host.__class__.__mro__

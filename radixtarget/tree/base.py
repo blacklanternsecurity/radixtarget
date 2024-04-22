@@ -1,4 +1,6 @@
 class RadixTreeNode:
+    __slots__ = ("children", "host", "data")
+
     def __init__(self):
         self.children = {}
         self.host = None
