@@ -34,7 +34,7 @@ jobs:
           poetry install
       - name: Run tests
         run: |
-          poetry run pytest --exitfirst --disable-warnings --log-cli-level=DEBUG --cov-report xml:cov.xml --cov=radixtest .
+          poetry run pytest --exitfirst --disable-warnings --log-cli-level=DEBUG --cov-report xml:cov.xml --cov=radixtarget .
       - name: Upload Code Coverage
         uses: codecov/codecov-action@v3
         with:
