@@ -9,12 +9,12 @@ class RadixTarget:
         self.ip_tree = IPRadixTree()
         self.dns_tree = DNSRadixTree()
 
-    def insert(self, host):
+    def insert(self, host, data=None):
         host = self.make_ip(host)
         if self.is_ip(host):
-            self.ip_tree.insert(host)
+            self.ip_tree.insert(host, data=data)
         else:
-            self.dns_tree.insert(host)
+            self.dns_tree.insert(host, data=data)
 
     def search(self, host):
         host = self.make_ip(host)
@@ -30,10 +30,5 @@ class RadixTarget:
             return str(host)
 
     def is_ip(self, host):
-        try:
-            ipaddress.ip_network(host)
-            return True
-        except Exception:
-            pass
-        print(f"{host} is not an IP network!!!!")
-        return False
+        version = getattr(host, "version", 0)
+        return version == 4 or version == 6

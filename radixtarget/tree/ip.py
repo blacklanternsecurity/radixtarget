@@ -6,7 +6,7 @@ from .base import BaseRadixTree, RadixTreeNode
 class IPRadixTree(BaseRadixTree):
 
     def insert(self, network, data=None):
-        network = ipaddress.ip_network(network)
+        network = ipaddress.ip_network(network, strict=False)
         if data is None:
             data = network
         node = self.root
