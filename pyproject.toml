@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "radixtarget"
-version = "0.0.9"
+version = "1.1.0"
 description = "Check whether an IP address belongs to a cloud provider"
 authors = ["TheTechromancer"]
 license = "GPL-3.0"
@@ -23,7 +23,7 @@ pytest-cov = "^5.0.0"
 [tool.poetry-dynamic-versioning]
 enable = true
 metadata = false
-format-jinja = 'v1.0.0.{{ distance }}'
+format-jinja = 'v1.1.0.{{ distance }}'
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]

@@ -1,4 +1,5 @@
 import time
+import pytest
 import random
 import logging
 import ipaddress
@@ -65,6 +66,12 @@ def test_radixtarget():
         assert rt.search("example.com") is None
         rt.insert("evilcorp.co.uk", "custom_data")
         assert rt.search("www.evilcorp.co.uk") == "custom_data"
+
+        with pytest.raises(ValueError, match=".*must be of str or ipaddress type.*"):
+            rt.insert(b"asdf")
+
+        with pytest.raises(ValueError, match=".*must be of str or ipaddress type.*"):
+            rt.search(b"asdf")
 
         assert "net" in rt.dns_tree.root.children
         assert "com" in rt.dns_tree.root.children

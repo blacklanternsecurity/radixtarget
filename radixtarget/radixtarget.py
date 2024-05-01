@@ -24,10 +24,15 @@ class RadixTarget:
             return self.dns_tree.search(host)
 
     def make_ip(self, host):
+        if not isinstance(host, str):
+            if not self.is_ip(host):
+                raise ValueError(
+                    f'Host "{host}" must be of str or ipaddress type, not "{type(host)}"'
+                )
         try:
-            return ipaddress.ip_network(host)
+            return ipaddress.ip_network(host, strict=False)
         except Exception:
-            return str(host).lower()
+            return host.lower()
 
     def is_ip(self, host):
         return ipaddress._IPAddressBase in host.__class__.__mro__
