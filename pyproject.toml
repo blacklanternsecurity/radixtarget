@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "radixtarget"
-version = "1.1.0"
+version = "2.0.0"
 description = "Check whether an IP address belongs to a cloud provider"
 authors = ["TheTechromancer"]
 license = "GPL-3.0"

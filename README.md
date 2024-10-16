@@ -2,11 +2,16 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/master/LICENSE) [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml/badge.svg)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml) [![Codecov](https://codecov.io/gh/blacklanternsecurity/radixtarget/graph/badge.svg?token=7IPWMYMTGZ)](https://codecov.io/gh/blacklanternsecurity/radixtarget)
 
-RadixTarget is a performant radix implementation designed for quick lookups of IP addresses/networks and DNS hostnames. Written in pure python and capable of roughly 100,000 lookups per second regardless of the size of the database.
+RadixTarget is a performant radix implementation designed for quick lookups of IP addresses/networks and DNS hostnames. 
 
-Used by:
-- [BBOT (Bighuge BLS OSINT Tool)](https://github.com/blacklanternsecurity/bbot)
-- [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
+RadixTarget is:
+- Written in pure python
+- Capable of ~100,000 lookups per second regardless of database size
+- 100% test coverage
+- Used by:
+    - [BBOT](https://github.com/blacklanternsecurity/bbot)
+    - [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
+Written in pure python and capable of roughly 100,000 lookups per second regardless of database size, it's perfect for production .
 
 ### Installation ([PyPi](https://pypi.org/project/radixtarget/))
 

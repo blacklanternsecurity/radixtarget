@@ -1,1 +1,1 @@
-from .radixtarget import RadixTarget
+from .radixtarget import Target
