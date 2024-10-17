@@ -199,7 +199,10 @@ def test_radixtarget():
     ]
 
     target1.add(["www.evilcorp.com", "www.evilcorp.net", "test.www.evilcorp.com"])
-    assert str(target1) == "1.2.3.0/24,evilcorp.com,evilcorp.net,www.evilcorp.com,www.evilcorp.net,..."
+    assert (
+        str(target1)
+        == "1.2.3.0/24,evilcorp.com,evilcorp.net,www.evilcorp.com,www.evilcorp.net,..."
+    )
 
     rt = Target()
 
