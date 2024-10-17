@@ -175,7 +175,9 @@ class Target:
         return self._hash
 
     def __str__(self):
-        return ",".join([str(h) for h in self.hosts][:5])
+        return ",".join([str(h) for h in self.sorted_hosts][:5]) + (
+            ",..." if len(self.hosts) > 5 else ""
+        )
 
     def __iter__(self):
         yield from self.hosts

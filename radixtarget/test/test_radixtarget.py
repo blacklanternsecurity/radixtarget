@@ -147,6 +147,7 @@ def test_radixtarget():
     grandparent_domain = "www.evilcorp.com"
     greatgrandparent_domain = "api.www.evilcorp.com"
     target = Target()
+    assert host_size_key(ipaddress.ip_address("1.2.3.4")) == (-1, "1.2.3.4/32")
     assert host_size_key(big_subnet) == (-256, "1.2.3.0/24")
     assert host_size_key(medium_subnet) == (-16, "1.2.3.0/28")
     assert host_size_key(small_subnet) == (-4, "1.2.3.4/30")
@@ -185,6 +186,7 @@ def test_radixtarget():
         "evilcorp.com",
         "evilcorp.net",
     ]
+    assert str(target1) == "1.2.3.0/24,evilcorp.com,evilcorp.net"
 
     # copying
     target3 = target1.copy()
@@ -195,6 +197,12 @@ def test_radixtarget():
         "evilcorp.com",
         "evilcorp.net",
     ]
+
+    target1.add(["www.evilcorp.com", "www.evilcorp.net", "test.www.evilcorp.com"])
+    assert (
+        str(target1)
+        == "1.2.3.0/24,evilcorp.com,evilcorp.net,www.evilcorp.com,www.evilcorp.net,..."
+    )
 
     rt = Target()
 
