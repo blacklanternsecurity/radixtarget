@@ -90,8 +90,11 @@ class RadixTarget:
         if not isinstance(t, (list, tuple, set)):
             t = [t]
         for single_target in sorted(t, key=host_size_key):
-            host = make_ip(single_target)
-            self.add_host(host, data=data)
+            self._add(single_target, data=data)
+
+    def _add(self, single_target, data=None):
+        host = make_ip(single_target)
+        self.add_host(host, data=data)
 
     def add_host(self, host, data=None):
         host = make_ip(host)
