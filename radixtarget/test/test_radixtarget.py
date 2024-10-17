@@ -104,17 +104,23 @@ def test_radixtarget():
     target1.add("evilcorp.com")
     target1.add("1.2.3.4/24")
     target1.add("evilcorp.net")
-    assert target1.hash == b'\xf7N\x89-\x7f(\xb3\xbe\n\xb9\xc5\xc3\x96\xee;\xecJ\xeb\xa8u'
+    assert (
+        target1.hash == b"\xf7N\x89-\x7f(\xb3\xbe\n\xb9\xc5\xc3\x96\xee;\xecJ\xeb\xa8u"
+    )
 
     target2 = Target()
     target2.add("evilcorp.org")
     target2.add("evilcorp.com")
     target2.add("1.2.3.4/24")
     target2.add("evilcorp.net")
-    assert target2.hash == b'\xbe\xcf\xf3\x06\xcb`\xc9\xd17\x14\x1c\r\xc18\x95{4\xcb9\x8a'
+    assert (
+        target2.hash == b"\xbe\xcf\xf3\x06\xcb`\xc9\xd17\x14\x1c\r\xc18\x95{4\xcb9\x8a"
+    )
 
     target3 = Target(*list(target1))
-    assert target3.hash == b'\xf7N\x89-\x7f(\xb3\xbe\n\xb9\xc5\xc3\x96\xee;\xecJ\xeb\xa8u'
+    assert (
+        target3.hash == b"\xf7N\x89-\x7f(\xb3\xbe\n\xb9\xc5\xc3\x96\xee;\xecJ\xeb\xa8u"
+    )
 
     target4 = Target(*list(target1), strict_dns_scope=True)
     assert target4.hash == b"stC\xd6\xd7\xa7\xf8\xfc\\4\xbd\x81NT\x17\xc6Nn'B"
