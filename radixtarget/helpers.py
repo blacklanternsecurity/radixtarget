@@ -10,12 +10,8 @@ def host_size_key(host):
     """
     host = make_ip(host)
     if is_ip(host):
-        try:
-            # bigger IP subnets should come first
-            return (-host.num_addresses, str(host))
-        except AttributeError:
-            # IP addresses default to 1
-            return (1, str(host))
+        # bigger IP subnets should come first
+        return (-host.num_addresses, str(host))
     # smaller domains should come first
     return (len(host), str(host))
 
