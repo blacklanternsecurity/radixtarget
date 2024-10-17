@@ -1,1 +1,4 @@
-from .radixtarget import Target
+from .radixtarget import RadixTarget
+
+# alias for convenience
+Target = RadixTarget
