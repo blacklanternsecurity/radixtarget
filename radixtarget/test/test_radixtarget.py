@@ -15,7 +15,7 @@ cidr_list_path = Path(__file__).parent / "cidrs.txt"
 from radixtarget import Target
 
 
-def test_target_asdf():
+def test_radixtarget():
     """
     Tests various functionalities of the Target library, including:
 
