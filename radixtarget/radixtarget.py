@@ -9,7 +9,7 @@ from radixtarget.helpers import is_ip, make_ip, host_size_key
 sentinel = object()
 
 
-class Target:
+class RadixTarget:
     """
     A class representing a target. Can contain an unlimited number of hosts, IPs, or IP ranges.
 
@@ -19,7 +19,7 @@ class Target:
 
     Examples:
         Basic usage
-        >>> target = SimpleTarget("evilcorp.com", "1.2.3.0/24")
+        >>> target = RadixTarget("evilcorp.com", "1.2.3.0/24")
         >>> len(target)
         257
         >>> "www.evilcorp.com" in target
@@ -30,7 +30,7 @@ class Target:
         False
 
         Target comparison
-        >>> target2 = SimpleTarget("www.evilcorp.com")
+        >>> target2 = RadixTarget("www.evilcorp.com")
         >>> target2 == target
         False
         >>> target2 in target
@@ -132,7 +132,7 @@ class Target:
                     A shallow copy of the `_events` dictionary is made.
 
         Examples:
-            >>> original_target = SimpleTarget("example.com")
+            >>> original_target = RadixTarget("example.com")
             >>> copied_target = original_target.copy()
             >>> copied_target is original_target
             False
@@ -206,7 +206,7 @@ class Target:
             int: The total number of unique hosts present within the target's `_hosts`.
 
         Examples:
-            >>> target = SimpleTarget("evilcorp.com", "1.2.3.0/24")
+            >>> target = RadixTarget("evilcorp.com", "1.2.3.0/24")
             >>> len(target)
             257
 

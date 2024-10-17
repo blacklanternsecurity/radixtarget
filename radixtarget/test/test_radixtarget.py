@@ -12,7 +12,7 @@ log = logging.getLogger("radixtarget.test")
 
 cidr_list_path = Path(__file__).parent / "cidrs.txt"
 
-from radixtarget import Target
+from radixtarget import RadixTarget
 
 
 def test_radixtarget():
@@ -30,11 +30,13 @@ def test_radixtarget():
     - Verifying strict DNS scope doesn't interfere with ACL operations.
     """
 
-    target1 = Target("api.publicapis.org", "8.8.8.8/30", "2001:4860:4860::8888/126")
-    target2 = Target("8.8.8.8/29", "publicapis.org", "2001:4860:4860::8888/125")
-    target3 = Target("8.8.8.8/29", "publicapis.org", "2001:4860:4860::8888/125")
-    target4 = Target("8.8.8.8/29")
-    target5 = Target()
+    target1 = RadixTarget(
+        "api.publicapis.org", "8.8.8.8/30", "2001:4860:4860::8888/126"
+    )
+    target2 = RadixTarget("8.8.8.8/29", "publicapis.org", "2001:4860:4860::8888/125")
+    target3 = RadixTarget("8.8.8.8/29", "publicapis.org", "2001:4860:4860::8888/125")
+    target4 = RadixTarget("8.8.8.8/29")
+    target5 = RadixTarget()
     assert not target5
     assert len(target1) == 9
     assert len(target4) == 8
@@ -78,21 +80,21 @@ def test_radixtarget():
     assert str(target1.get("www.api.publicapis.org")) == "api.publicapis.org"
     assert target1.get("publicapis.org") is None
 
-    target = Target("evilcorp.com")
+    target = RadixTarget("evilcorp.com")
     assert not "com" in target
     assert "evilcorp.com" in target
     assert "www.evilcorp.com" in target
-    strict_target = Target("evilcorp.com", strict_dns_scope=True)
+    strict_target = RadixTarget("evilcorp.com", strict_dns_scope=True)
     assert not "com" in strict_target
     assert "evilcorp.com" in strict_target
     assert not "www.evilcorp.com" in strict_target
 
-    target = Target()
+    target = RadixTarget()
     target.add("evilcorp.com")
     assert not "com" in target
     assert "evilcorp.com" in target
     assert "www.evilcorp.com" in target
-    strict_target = Target(strict_dns_scope=True)
+    strict_target = RadixTarget(strict_dns_scope=True)
     strict_target.add("evilcorp.com")
     assert not "com" in strict_target
     assert "evilcorp.com" in strict_target
@@ -100,7 +102,7 @@ def test_radixtarget():
 
     # test target hashing
 
-    target1 = Target()
+    target1 = RadixTarget()
     target1.add("evilcorp.com")
     target1.add("1.2.3.4/24")
     target1.add("evilcorp.net")
@@ -108,7 +110,7 @@ def test_radixtarget():
         target1.hash == b"\xf7N\x89-\x7f(\xb3\xbe\n\xb9\xc5\xc3\x96\xee;\xecJ\xeb\xa8u"
     )
 
-    target2 = Target()
+    target2 = RadixTarget()
     target2.add("evilcorp.org")
     target2.add("evilcorp.com")
     target2.add("1.2.3.4/24")
@@ -117,12 +119,12 @@ def test_radixtarget():
         target2.hash == b"\xbe\xcf\xf3\x06\xcb`\xc9\xd17\x14\x1c\r\xc18\x95{4\xcb9\x8a"
     )
 
-    target3 = Target(*list(target1))
+    target3 = RadixTarget(*list(target1))
     assert (
         target3.hash == b"\xf7N\x89-\x7f(\xb3\xbe\n\xb9\xc5\xc3\x96\xee;\xecJ\xeb\xa8u"
     )
 
-    target4 = Target(*list(target1), strict_dns_scope=True)
+    target4 = RadixTarget(*list(target1), strict_dns_scope=True)
     assert target4.hash == b"stC\xd6\xd7\xa7\xf8\xfc\\4\xbd\x81NT\x17\xc6Nn'B"
 
     # make sure it's a sha1 hash
@@ -146,7 +148,7 @@ def test_radixtarget():
     parent_domain = "evilcorp.com"
     grandparent_domain = "www.evilcorp.com"
     greatgrandparent_domain = "api.www.evilcorp.com"
-    target = Target()
+    target = RadixTarget()
     assert host_size_key(ipaddress.ip_address("1.2.3.4")) == (-1, "1.2.3.4/32")
     assert host_size_key(big_subnet) == (-256, "1.2.3.0/24")
     assert host_size_key(medium_subnet) == (-16, "1.2.3.0/28")
@@ -176,8 +178,8 @@ def test_radixtarget():
     ]
 
     # merging targets
-    target1 = Target("1.2.3.4/24", "evilcorp.net")
-    target2 = Target("evilcorp.com", "evilcorp.net")
+    target1 = RadixTarget("1.2.3.4/24", "evilcorp.net")
+    target2 = RadixTarget("evilcorp.com", "evilcorp.net")
     assert sorted([str(h) for h in target1]) == ["1.2.3.0/24", "evilcorp.net"]
     assert sorted([str(h) for h in target2]) == ["evilcorp.com", "evilcorp.net"]
     target1.add(target2)
@@ -204,7 +206,11 @@ def test_radixtarget():
         == "1.2.3.0/24,evilcorp.com,evilcorp.net,www.evilcorp.com,www.evilcorp.net,..."
     )
 
-    rt = Target()
+    target = RadixTarget("evilcorp.com", "test.com")
+    print(target.search("test.amazonaws.com"))
+    # assert target.search("azure.com") is None
+
+    rt = RadixTarget()
 
     for _ in range(2):
 
@@ -316,23 +322,23 @@ def test_radixtarget():
         )
 
         # make sure child subnets/IPs don't get added to whitelist/blacklist
-        target = Target("1.2.3.4/24", "1.2.3.4/28", acl_mode=True)
+        target = RadixTarget("1.2.3.4/24", "1.2.3.4/28", acl_mode=True)
         assert sorted([str(h) for h in target.hosts]) == ["1.2.3.0/24"]
-        target = Target("1.2.3.4/28", "1.2.3.4/24", acl_mode=True)
+        target = RadixTarget("1.2.3.4/28", "1.2.3.4/24", acl_mode=True)
         assert sorted([str(h) for h in target.hosts]) == ["1.2.3.0/24"]
-        target = Target("1.2.3.4/28", "1.2.3.4", acl_mode=True)
+        target = RadixTarget("1.2.3.4/28", "1.2.3.4", acl_mode=True)
         assert sorted([str(h) for h in target.hosts]) == ["1.2.3.0/28"]
-        target = Target("1.2.3.4", "1.2.3.4/28", acl_mode=True)
+        target = RadixTarget("1.2.3.4", "1.2.3.4/28", acl_mode=True)
         assert sorted([str(h) for h in target.hosts]) == ["1.2.3.0/28"]
 
         # same but for domains
-        target = Target("evilcorp.com", "www.evilcorp.com", acl_mode=True)
+        target = RadixTarget("evilcorp.com", "www.evilcorp.com", acl_mode=True)
         assert sorted([str(h) for h in target.hosts]) == ["evilcorp.com"]
-        target = Target("www.evilcorp.com", "evilcorp.com", acl_mode=True)
+        target = RadixTarget("www.evilcorp.com", "evilcorp.com", acl_mode=True)
         assert sorted([str(h) for h in target.hosts]) == ["evilcorp.com"]
 
         # make sure strict_scope doesn't mess us up
-        target = Target(
+        target = RadixTarget(
             "evilcorp.co.uk", "www.evilcorp.co.uk", acl_mode=True, strict_dns_scope=True
         )
         assert sorted([str(h) for h in target.hosts]) == [
