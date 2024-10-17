@@ -1,10 +1,13 @@
+sentinel = object()
+
+
 class RadixTreeNode:
     __slots__ = ("children", "host", "data")
 
     def __init__(self):
         self.children = {}
         self.host = None
-        self.data = None
+        self.data = sentinel
 
 
 class BaseRadixTree:
