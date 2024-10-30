@@ -70,13 +70,22 @@ class RadixTarget:
             return self.dns_tree.search(host, raise_error=raise_error)
 
     def search(self, host, raise_error=False):
+        """
+        Alias for get
+        """
         return self.get(host, raise_error=raise_error)
 
     def insert(self, t, data=None):
-        self.add(t, data=data)
+        """
+        Alias for add
+        """
+        return self.add(t, data=data)
 
     def put(self, t, data=None):
-        self.add(t, data=data)
+        """
+        Alias for add
+        """
+        return self.add(t, data=data)
 
     def add(self, t, data=None):
         """
