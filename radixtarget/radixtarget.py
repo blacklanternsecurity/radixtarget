@@ -75,6 +75,9 @@ class RadixTarget:
     def insert(self, t, data=None):
         self.add(t, data=data)
 
+    def put(self, t, data=None):
+        self.add(t, data=data)
+
     def add(self, t, data=None):
         """
         Add a target or merge hosts from another Target object into this Target.
@@ -85,35 +88,36 @@ class RadixTarget:
         Examples:
             >>> target.add('example.com')
         """
+        results = []
         if isinstance(t, self.__class__):
             t = t.hosts
         if not isinstance(t, (list, tuple, set)):
             t = [t]
         for single_target in sorted(t, key=host_size_key):
-            self._add(single_target, data=data)
+            host = make_ip(single_target)
+            try:
+                result = self.search(host, raise_error=True)
+            except KeyError:
+                result = sentinel
+            # if we're in acl mode, we skip adding hosts that are already in the target
+            if self.acl_mode and result is not sentinel:
+                continue
+            results.append(self._add(host, data=data))
+        return results
 
-    def _add(self, single_target, data=None):
-        host = make_ip(single_target)
-        self.add_host(host, data=data)
-
-    def add_host(self, host, data=None):
-        host = make_ip(host)
-        try:
-            result = self.search(host, raise_error=True)
-        except KeyError:
-            result = sentinel
-        # if we're in acl mode, we skip adding hosts that are already in the target
-        if self.acl_mode and result is not sentinel:
-            return
-        self._add_host(host, data=data)
+    def _add(self, host, data=None):
+        """
+        A no-op layer to make room
+        """
+        return self._add_host(host, data=data)
 
     def _add_host(self, host, data=None):
         self._hash = None
         self._hosts.add(host)
         if is_ip(host):
-            self.ip_tree.insert(host, data=data)
+            return self.ip_tree.insert(host, data=data)
         else:
-            self.dns_tree.insert(host, data=data)
+            return self.dns_tree.insert(host, data=data)
 
     @property
     def hosts(self):
