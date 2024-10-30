@@ -123,6 +123,7 @@ class RadixTarget:
         return self._add_host(host, data=data)
 
     def _add_host(self, host, data=None):
+        host = make_ip(host)
         self._hash = None
         self._hosts.add(host)
         if is_ip(host):
