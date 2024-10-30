@@ -107,7 +107,9 @@ class RadixTarget:
 
     def _add(self, host, data=None):
         """
-        A no-op layer to make room
+        A no-op layer for custom functionality.
+
+        If you need to perform special tasks when adding a host, you can override this method.
         """
         return self._add_host(host, data=data)
 
