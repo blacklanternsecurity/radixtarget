@@ -11,7 +11,6 @@ RadixTarget is:
 - Used by:
     - [BBOT](https://github.com/blacklanternsecurity/bbot)
     - [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
-Written in pure python and capable of roughly 100,000 lookups per second regardless of database size, it's perfect for production .
 
 ### Installation ([PyPi](https://pypi.org/project/radixtarget/))
 
