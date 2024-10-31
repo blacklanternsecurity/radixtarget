@@ -142,6 +142,9 @@ class RadixTarget:
     def sorted_hosts(self):
         return sorted(self._hosts, key=host_size_key)
 
+    def _hash_value(self):
+        return [str(h).encode() for h in self.sorted_hosts]
+
     def copy(self):
         """
         Creates and returns a copy of the Target object, including a shallow copy of the `_events` attributes.
@@ -186,7 +189,7 @@ class RadixTarget:
             # Create a new SHA-1 hash object
             sha1_hash = sha1()
             # Update the SHA-1 object with the hash values of each object
-            for host in [str(h).encode() for h in self.sorted_hosts]:
+            for host in self._hash_value():
                 sha1_hash.update(host)
             if self.strict_dns_scope:
                 sha1_hash.update(b"\x00")
