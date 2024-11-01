@@ -3,7 +3,7 @@ from hashlib import sha1
 
 from radixtarget.tree.ip import IPRadixTree
 from radixtarget.tree.dns import DNSRadixTree
-from radixtarget.helpers import is_ip, make_ip, host_size_key
+from radixtarget.helpers import is_ip, is_dns_name, make_ip, host_size_key
 
 
 sentinel = object()
@@ -66,8 +66,10 @@ class RadixTarget:
         host = make_ip(host)
         if is_ip(host):
             return self.ip_tree.search(host, raise_error=raise_error)
-        else:
+        elif is_dns_name(host):
             return self.dns_tree.search(host, raise_error=raise_error)
+        else:
+            raise ValueError(f"Invalid host: '{host}'")
 
     def search(self, host, raise_error=False):
         """
@@ -128,8 +130,10 @@ class RadixTarget:
         self._hosts.add(host)
         if is_ip(host):
             return self.ip_tree.insert(host, data=data)
-        else:
+        elif is_dns_name(host):
             return self.dns_tree.insert(host, data=data)
+        else:
+            raise ValueError(f"Invalid host: '{host}'")
 
     @property
     def hosts(self):

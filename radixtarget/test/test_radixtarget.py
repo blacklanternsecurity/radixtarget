@@ -349,3 +349,14 @@ def test_radixtarget():
         assert "www.evilcorp.co.uk" in target
         assert not "api.evilcorp.co.uk" in target
         assert not "api.www.evilcorp.co.uk" in target
+
+        # test with invalid inputs
+        with pytest.raises(ValueError, match=".*Invalid host: 'http://example.com'.*"):
+            target = RadixTarget("http://example.com")
+        target = RadixTarget("example.com")
+        with pytest.raises(ValueError, match=".*Invalid host: 'evilcorp.com:80'.*"):
+            target.get("evilcorp.com:80")
+        with pytest.raises(ValueError, match=".*Invalid host: 'www.evilcorp.com:80'.*"):
+            target.add("www.evilcorp.com:80")
+        with pytest.raises(ValueError, match=".*Invalid host: 'evilcorp.com:80'.*"):
+            "evilcorp.com:80" in target

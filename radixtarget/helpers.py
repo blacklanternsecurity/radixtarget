@@ -1,3 +1,4 @@
+import re
 import ipaddress
 
 
@@ -26,6 +27,26 @@ def is_ip(host):
         bool: True if the host is an instance of an IP address, False otherwise.
     """
     return ipaddress._IPAddressBase in host.__class__.__mro__
+
+
+dns_name_regex = re.compile(r"^[\w]+[\w.-]*$", re.I)
+
+
+def is_dns_name(host):
+    """
+    Check if the given host is a valid DNS name.
+
+    This function uses a regular expression to determine if the provided
+    host string matches the pattern of a valid DNS name. The pattern allows
+    alphanumeric characters, underscores, hyphens, and periods, and is case-insensitive.
+
+    Args:
+        host (str): The host string to check.
+
+    Returns:
+        bool: True if the host is a valid DNS name, False otherwise.
+    """
+    return bool(dns_name_regex.match(host))
 
 
 def make_ip(host):
