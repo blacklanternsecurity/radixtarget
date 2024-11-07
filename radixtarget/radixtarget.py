@@ -104,15 +104,7 @@ class RadixTarget:
             t = t.hosts
         if not isinstance(t, (list, tuple, set)):
             t = [t]
-        for single_target in sorted(t, key=host_size_key):
-            host = make_ip(single_target)
-            try:
-                result = self.search(host, raise_error=True)
-            except KeyError:
-                result = sentinel
-            # if we're in acl mode, we skip adding hosts that are already in the target
-            if self.acl_mode and result is not sentinel:
-                continue
+        for host in sorted(t, key=host_size_key):
             results.append(self._add(host, data=data))
         return results
 
@@ -125,6 +117,13 @@ class RadixTarget:
         return self._add_host(host, data=data)
 
     def _add_host(self, host, data=None):
+        try:
+            result = self.search(host, raise_error=True)
+        except KeyError:
+            result = sentinel
+        # if we're in acl mode, we skip adding hosts that are already in the target
+        if self.acl_mode and result is not sentinel:
+            return
         host = make_ip(host)
         self._hash = None
         self._hosts.add(host)
