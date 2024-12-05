@@ -214,7 +214,7 @@ def test_radixtarget():
         # ipv6
         rt.insert("dead::/64")
         assert rt.search("dead::beef") == ipaddress.ip_network("dead::/64")
-        assert rt.search("dead:cafe::beef") == None
+        assert rt.search("dead:cafe::beef") is None
         rt.insert("cafe::babe")
         assert rt.search("cafe::babe") == ipaddress.ip_network("cafe::babe/128")
         rt.insert("beef::/120", "custom_beef")
@@ -223,10 +223,10 @@ def test_radixtarget():
         # networks
         rt.insert("192.168.128.0/24")
         assert rt.search("192.168.128.0/28") == ipaddress.ip_network("192.168.128.0/24")
-        assert rt.search("192.168.128.0/23") == None
+        assert rt.search("192.168.128.0/23") is None
         rt.insert("babe::/64")
         assert rt.search("babe::/96") == ipaddress.ip_network("babe::/64")
-        assert rt.search("babe::/63") == None
+        assert rt.search("babe::/63") is None
 
         # ipv4 / ipv6 confusion
         rand_int = random.randint(0, 2**32 - 1)
