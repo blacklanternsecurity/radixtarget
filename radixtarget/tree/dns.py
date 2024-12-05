@@ -49,10 +49,7 @@ class DNSRadixTree(BaseRadixTree):
             new_node.children = old_node.children
             node.children[node_index] = new_node
         else:
-            try:
-                del node.children[node_index]
-            except KeyError:
-                raise KeyError(f'Hostname "{query}" not found')
+            del node.children[node_index]
 
     def get_node(self, hostname, raise_error=False):
         """Find the most specific matching entry for a given hostname.

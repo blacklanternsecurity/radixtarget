@@ -340,6 +340,30 @@ def test_radixtarget():
         with pytest.raises(ValueError, match=".*Invalid host: 'evilcorp.com:80'.*"):
             "evilcorp.com:80" in target
 
+    # push that coverage
+    target = RadixTarget()
+    target.put("1.2.3.254/32")
+    target.put("1.2.3.255/32")
+    target.delete_node("1.2.3.255/32")
+    with pytest.raises(KeyError):
+        target.delete_node("1.2.3.255/32")
+    
+    target = RadixTarget()
+    target.put("0.0.0.0/0")
+    target.put('0.0.0.1/32')
+    target.delete_node('0.0.0.0/0')
+    assert target.get('0.0.0.1/32') == ipaddress.ip_network('0.0.0.1/32')
+    assert target.get_data('0.0.0.1/32') == ipaddress.ip_network('0.0.0.1/32')
+
+    target = RadixTarget()
+    target.insert("www.example.com", "val1")
+    with pytest.raises(KeyError):
+        target.delete_node("www.evilcorp.com")
+    assert target.dns_tree.get("www.example.com") == "val1"
+    assert target.dns_tree.get_host("www.example.com") == "www.example.com"
+    target.delete_node("www.example.com")
+
+
 
 def test_ipv4_ipv6_same_bits():
     # ipv4 and ipv6 host with same bits
@@ -375,10 +399,6 @@ def test_ipv4_ipv6_same_bits():
     assert target.search("dead::beef") == "val4"
     with pytest.raises(ValueError):
         target.delete_node(" asdf")
-    target.put("1.2.3.254/32", "val5")
-    with pytest.raises(KeyError):
-        target.delete_node("1.2.3.255/32")
-    assert target.get_data("1.2.3.254") == "val5"
 
 
 def test_prune():
@@ -498,14 +518,6 @@ def test_delete_node():
         "www.example.com",
         "api.test.www.example.com",
     }
-
-    target = RadixTarget()
-    target.insert("www.example.com", "val1")
-    with pytest.raises(KeyError):
-        target.delete_node("test.example.com")
-    assert target.dns_tree.get("www.example.com") == "val1"
-    assert target.dns_tree.get_host("www.example.com") == "www.example.com"
-    target.delete_node("www.example.com")
 
 
 def test_merge_subnets():

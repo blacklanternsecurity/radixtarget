@@ -95,10 +95,7 @@ class IPRadixTree(BaseRadixTree):
             new_node.children = old_node.children
             parent_node.children[node_index] = new_node
         else:
-            try:
-                del parent_node.children[node_index]
-            except KeyError:
-                raise KeyError(f'IP "{query}" not found')
+            del parent_node.children[node_index]
 
     def get_node(self, query, raise_error=False):
         """Find the most specific matching entry for a given IP address or network.
