@@ -26,7 +26,7 @@ lint.ignore = ["E402", "E713", "E721", "E741", "F401", "F403", "F405"]
 [tool.poetry-dynamic-versioning]
 enable = true
 metadata = false
-format-jinja = 'v3.0.0.{{ distance }}'
+format-jinja = 'v3.0.{{ distance }}'
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
