@@ -373,6 +373,10 @@ def test_ipv4_ipv6_same_bits():
         target.search("::", raise_error=True)
     assert target.search("1.2.3.4") == "val3"
     assert target.search("dead::beef") == "val4"
+    with pytest.raises(ValueError):
+        target.delete_node(" asdf")
+    target.put("1.2.3.4", "val5")
+    assert target.get_data("1.2.3.4") == "val5"
 
 
 def test_prune():
