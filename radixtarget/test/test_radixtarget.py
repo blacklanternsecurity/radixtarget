@@ -375,8 +375,10 @@ def test_ipv4_ipv6_same_bits():
     assert target.search("dead::beef") == "val4"
     with pytest.raises(ValueError):
         target.delete_node(" asdf")
-    target.put("1.2.3.4", "val5")
-    assert target.get_data("1.2.3.4") == "val5"
+    target.put("1.2.3.254/32", "val5")
+    with pytest.raises(KeyError):
+        target.delete_node("1.2.3.255/32")
+    assert target.get_data("1.2.3.254") == "val5"
 
 
 def test_prune():
@@ -496,6 +498,14 @@ def test_delete_node():
         "www.example.com",
         "api.test.www.example.com",
     }
+
+    target = RadixTarget()
+    target.insert("www.example.com", "val1")
+    with pytest.raises(KeyError):
+        target.delete_node("test.example.com")
+    assert target.dns_tree.get("www.example.com") == "val1"
+    assert target.dns_tree.get_host("www.example.com") == "www.example.com"
+    target.delete_node("www.example.com")
 
 
 def test_merge_subnets():
@@ -752,4 +762,23 @@ def test_defrag():
     assert target.get("dead:beef::ff") == ipaddress.ip_network("dead:beef::/120")
     assert target.hosts == {
         ipaddress.ip_network("dead:beef::/120"),
+    }
+
+    # existing parent node with unique data (should prevent defrag)
+    target = RadixTarget()
+    target.insert("192.168.0.0/24", "val1")
+    target.insert("192.168.0.0/25", "val2")
+    target.insert("192.168.0.128/25", "val2")
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/24"),
+        ipaddress.ip_network("192.168.0.0/25"),
+        ipaddress.ip_network("192.168.0.128/25"),
+    }
+    cleaned_hosts, new_hosts = target.defrag()
+    assert cleaned_hosts == set()
+    assert new_hosts == set()
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/24"),
+        ipaddress.ip_network("192.168.0.0/25"),
+        ipaddress.ip_network("192.168.0.128/25"),
     }
