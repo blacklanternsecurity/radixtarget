@@ -1,5 +1,6 @@
 import copy
 from hashlib import sha1
+from contextlib import suppress
 
 from radixtarget.tree.ip import IPRadixTree
 from radixtarget.tree.dns import DNSRadixTree
@@ -57,25 +58,54 @@ class RadixTarget:
         self._hash = None
         self.strict_dns_scope = strict_dns_scope
         self.acl_mode = acl_mode
-        self.ip_tree = IPRadixTree()
+        self.ipv4_tree = IPRadixTree()
+        self.ipv6_tree = IPRadixTree()
         self.dns_tree = DNSRadixTree(strict_scope=strict_dns_scope)
         self._hosts = set()
         self.add(targets)
 
-    def get(self, host, raise_error=False):
+    def get_node(self, host, raise_error=False):
         host = make_ip(host)
+        node = None
         if is_ip(host):
-            return self.ip_tree.search(host, raise_error=raise_error)
+            if host.version == 4:
+                node = self.ipv4_tree.get_node(host, raise_error=raise_error)
+            else:
+                node = self.ipv6_tree.get_node(host, raise_error=raise_error)
         elif is_dns_name(host):
-            return self.dns_tree.search(host, raise_error=raise_error)
+            node = self.dns_tree.get_node(host, raise_error=raise_error)
+        else:
+            raise ValueError(f"Invalid host: '{host}'")
+        return node
+
+    def delete_node(self, host):
+        host = make_ip(host)
+        self.hosts.discard(host)
+        if is_ip(host):
+            if host.version == 4:
+                return self.ipv4_tree.delete_node(host)
+            else:
+                return self.ipv6_tree.delete_node(host)
+        elif is_dns_name(host):
+            return self.dns_tree.delete_node(host)
         else:
             raise ValueError(f"Invalid host: '{host}'")
 
+    def get(self, host, raise_error=False):
+        node = self.get_node(host, raise_error=raise_error)
+        return getattr(node, "data", None)
+
     def search(self, host, raise_error=False):
-        """
-        Alias for get
-        """
+        # alias for get
         return self.get(host, raise_error=raise_error)
+
+    def get_data(self, host, raise_error=False):
+        # alias for get
+        return self.get(host, raise_error=raise_error)
+
+    def get_host(self, host, raise_error=False):
+        node = self.get_node(host, raise_error=raise_error)
+        return getattr(node, "host", None)
 
     def insert(self, t, data=None):
         """
@@ -117,22 +147,37 @@ class RadixTarget:
         return self._add_host(host, data=data)
 
     def _add_host(self, host, data=None):
-        try:
-            result = self.search(host, raise_error=True)
-        except KeyError:
-            result = sentinel
-        # if we're in acl mode, we skip adding hosts that are already in the target
-        if self.acl_mode and result is not sentinel:
-            return
+        if self.acl_mode:
+            with suppress(KeyError):
+                self.search(host, raise_error=True)
+                # if we're in acl mode, we skip adding hosts that are already in the target
+                return
         host = make_ip(host)
         self._hash = None
         self._hosts.add(host)
         if is_ip(host):
-            return self.ip_tree.insert(host, data=data)
+            if host.version == 4:
+                return self.ipv4_tree.insert(host, data=data)
+            else:
+                return self.ipv6_tree.insert(host, data=data)
         elif is_dns_name(host):
             return self.dns_tree.insert(host, data=data)
         else:
             raise ValueError(f"Invalid host: '{host}'")
+
+    def prune(self):
+        return self.ipv4_tree.prune() + self.ipv6_tree.prune() + self.dns_tree.prune()
+
+    def defrag(self):
+        cleaned_hosts = set()
+        new_hosts = set()
+        for tree in [self.ipv4_tree, self.ipv6_tree]:
+            _cleaned, _new = tree.defrag()
+            cleaned_hosts.update(_cleaned)
+            new_hosts.update(_new)
+        self._hosts.difference_update(cleaned_hosts)
+        self._hosts.update(new_hosts)
+        return cleaned_hosts, new_hosts
 
     @property
     def hosts(self):
@@ -144,6 +189,14 @@ class RadixTarget:
     @property
     def sorted_hosts(self):
         return sorted(self._hosts, key=host_size_key)
+
+    @property
+    def all_nodes(self):
+        return self.ipv4_tree.all_nodes + self.ipv6_tree.all_nodes + self.dns_tree.all_nodes
+
+    @property
+    def nodes_by_host(self):
+        return self.ipv4_tree.nodes_by_host | self.ipv6_tree.nodes_by_host | self.dns_tree.nodes_by_host
 
     def _hash_value(self):
         return [str(h).encode() for h in self.sorted_hosts]
@@ -171,11 +224,10 @@ class RadixTarget:
         Notes:
             - The `scan` object reference is kept intact in the copied Target object.
         """
-        self_copy = self.__class__(
-            strict_dns_scope=self.strict_dns_scope, acl_mode=self.acl_mode
-        )
+        self_copy = self.__class__(strict_dns_scope=self.strict_dns_scope, acl_mode=self.acl_mode)
         self_copy._hosts = set(self._hosts)
-        self_copy.ip_tree = copy.copy(self.ip_tree)
+        self_copy.ipv4_tree = copy.copy(self.ipv4_tree)
+        self_copy.ipv6_tree = copy.copy(self.ipv6_tree)
         self_copy.dns_tree = copy.copy(self.dns_tree)
         return self_copy
 
@@ -200,9 +252,7 @@ class RadixTarget:
         return self._hash
 
     def __str__(self):
-        return ",".join([str(h) for h in self.sorted_hosts][:5]) + (
-            ",..." if len(self.hosts) > 5 else ""
-        )
+        return ",".join([str(h) for h in self.sorted_hosts][:5]) + (",..." if len(self.hosts) > 5 else "")
 
     def __iter__(self):
         yield from self.hosts

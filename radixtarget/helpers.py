@@ -70,10 +70,29 @@ def make_ip(host):
     """
     if not isinstance(host, str):
         if not is_ip(host):
-            raise ValueError(
-                f'Host "{host}" must be of str or ipaddress type, not "{type(host)}"'
-            )
+            raise ValueError(f'Host "{host}" must be of str or ipaddress type, not "{type(host)}"')
     try:
         return ipaddress.ip_network(host, strict=False)
     except Exception:
         return host.lower()
+
+
+def network_to_bits(network):
+    network_value = int(network.network_address)
+    for i in range(network.prefixlen):
+        yield (network_value >> (network.max_prefixlen - 1 - i)) & 1
+
+
+def merge_subnets(network1, network2):
+    if network1.version != network2.version:
+        raise ValueError(f"Cannot merge networks of different versions: {network1} and {network2}")
+    # make sure network1 comes before network2
+    if network1.network_address > network2.network_address:
+        network1, network2 = network2, network1
+    if not network1.prefixlen == network2.prefixlen:
+        raise ValueError(f"Cannot merge networks with different prefix lengths: {network1} and {network2}")
+    supernet1 = network1.supernet(1)
+    supernet2 = network2.supernet(1)
+    if supernet1 != supernet2:
+        raise ValueError(f"Cannot merge networks {network1} and {network2} because their supernets are not the same")
+    return supernet1

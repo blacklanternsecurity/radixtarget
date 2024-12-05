@@ -15,15 +15,18 @@ homepage = "https://github.com/blacklanternsecurity/radixtarget"
 python = "^3.9"
 
 [tool.poetry.group.dev.dependencies]
-black = ">=22.12,<25.0"
-flake8 = ">=6.1,<8.0"
 pytest = "^8.1.1"
 pytest-cov = ">=5,<7"
+ruff = "^0.8.1"
+
+[tool.ruff]
+line-length = 119
+lint.ignore = ["E402", "E713", "E721", "E741", "F401", "F403", "F405"]
 
 [tool.poetry-dynamic-versioning]
 enable = true
 metadata = false
-format-jinja = 'v2.0.0.{{ distance }}'
+format-jinja = 'v3.0.{{ distance }}'
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
