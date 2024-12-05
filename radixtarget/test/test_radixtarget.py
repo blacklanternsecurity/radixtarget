@@ -494,84 +494,7 @@ def test_delete_node():
     }
 
 
-def test_defrag():
-    # # basic duplicate removal
-    # target = RadixTarget()
-    # target.insert("192.168.0.0/28")
-    # assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/28")
-    # assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
-    # target.insert("192.168.0.0/30")
-    # assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/30")
-    # assert target.hosts == {
-    #     ipaddress.ip_network("192.168.0.0/28"),
-    #     ipaddress.ip_network("192.168.0.0/30"),
-    # }
-    # cleaned_hosts, new_hosts = target.defrag()
-    # assert new_hosts == set()
-    # assert cleaned_hosts == {ipaddress.ip_network("192.168.0.0/30")}
-    # assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/28")
-    # assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
-
-    # # basic duplicate removal with custom data
-    # target = RadixTarget()
-    # target.insert("192.168.0.0/28", "val1")
-    # assert target.get("192.168.0.0") == "val1"
-    # assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
-    # target.insert("192.168.0.0/30", "val1")
-    # assert target.get("192.168.0.0") == "val1"
-    # assert target.hosts == {
-    #     ipaddress.ip_network("192.168.0.0/28"),
-    #     ipaddress.ip_network("192.168.0.0/30"),
-    # }
-    # cleaned_hosts, new_hosts = target.defrag()
-    # assert new_hosts == set()
-    # assert cleaned_hosts == {ipaddress.ip_network("192.168.0.0/30")}
-    # assert target.get("192.168.0.0") == "val1"
-    # assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
-
-    # # basic duplicate removal with different custom data
-    # target = RadixTarget()
-    # target.insert("192.168.0.0/28", "val1")
-    # assert target.get("192.168.0.0") == "val1"
-    # assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
-    # target.insert("192.168.0.0/30", "val2")
-    # assert target.get("192.168.0.0") == "val2"
-    # assert target.hosts == {
-    #     ipaddress.ip_network("192.168.0.0/28"),
-    #     ipaddress.ip_network("192.168.0.0/30"),
-    # }
-    # cleaned_hosts, new_hosts = target.defrag()
-    # assert new_hosts == set()
-    # assert cleaned_hosts == set()
-    # assert target.get("192.168.0.0") == "val2"
-    # assert target.hosts == {
-    #     ipaddress.ip_network("192.168.0.0/28"),
-    #     ipaddress.ip_network("192.168.0.0/30"),
-    # }
-
-    # # multiple nested duplicates
-    # target = RadixTarget()
-    # target.insert("192.168.0.0/24", "val1")
-    # target.insert("192.168.0.0/26", "val1")
-    # target.insert("192.168.0.0/28", "val1")
-    # assert target.hosts == {
-    #     ipaddress.ip_network("192.168.0.0/24"),
-    #     ipaddress.ip_network("192.168.0.0/26"),
-    #     ipaddress.ip_network("192.168.0.0/28"),
-    # }
-    # assert target.get("192.168.0.0") == "val1"
-    # assert target.get_host("192.168.0.0") == ipaddress.ip_network("192.168.0.0/28")
-    # cleaned_hosts, new_hosts = target.defrag()
-    # assert cleaned_hosts == {
-    #     ipaddress.ip_network("192.168.0.0/26"),
-    #     ipaddress.ip_network("192.168.0.0/28"),
-    # }
-    # assert target.hosts == {
-    #     ipaddress.ip_network("192.168.0.0/24"),
-    # }
-    # assert target.get("192.168.0.0") == "val1"
-    # assert target.get_host("192.168.0.0") == ipaddress.ip_network("192.168.0.0/24")
-
+def test_merge_subnets():
     # test mergeable helper
     subnet1 = ipaddress.ip_network("192.168.0.0/25")
     subnet2 = ipaddress.ip_network("192.168.0.128/25")
@@ -597,6 +520,107 @@ def test_defrag():
         merge_subnets(ipv4, ipv6)
     with pytest.raises(ValueError):
         merge_subnets(ipv6, ipv4)
+
+    subnet1 = ipaddress.ip_network("192.168.0.0/26")
+    subnet2 = ipaddress.ip_network("192.168.0.64/26")
+    subnet3 = ipaddress.ip_network("192.168.0.128/26")
+    subnet4 = ipaddress.ip_network("192.168.0.192/26")
+
+    assert merge_subnets(subnet1, subnet2) == ipaddress.ip_network("192.168.0.0/25")
+    assert merge_subnets(subnet2, subnet1) == ipaddress.ip_network("192.168.0.0/25")
+    assert merge_subnets(subnet3, subnet4) == ipaddress.ip_network("192.168.0.128/25")
+    assert merge_subnets(subnet4, subnet3) == ipaddress.ip_network("192.168.0.128/25")
+    with pytest.raises(ValueError):
+        merge_subnets(subnet2, subnet3)
+    with pytest.raises(ValueError):
+        merge_subnets(subnet3, subnet2)
+    with pytest.raises(ValueError):
+        merge_subnets(subnet1, subnet3)
+    with pytest.raises(ValueError):
+        merge_subnets(subnet3, subnet1)
+    with pytest.raises(ValueError):
+        merge_subnets(subnet1, subnet4)
+    with pytest.raises(ValueError):
+        merge_subnets(subnet4, subnet1)
+
+
+def test_defrag():
+    # basic duplicate removal
+    target = RadixTarget()
+    target.insert("192.168.0.0/28")
+    assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/28")
+    assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
+    target.insert("192.168.0.0/30")
+    assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/30")
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/28"),
+        ipaddress.ip_network("192.168.0.0/30"),
+    }
+    cleaned_hosts, new_hosts = target.defrag()
+    assert new_hosts == set()
+    assert cleaned_hosts == {ipaddress.ip_network("192.168.0.0/30")}
+    assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/28")
+    assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
+
+    # basic duplicate removal with custom data
+    target = RadixTarget()
+    target.insert("192.168.0.0/28", "val1")
+    assert target.get("192.168.0.0") == "val1"
+    assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
+    target.insert("192.168.0.0/30", "val1")
+    assert target.get("192.168.0.0") == "val1"
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/28"),
+        ipaddress.ip_network("192.168.0.0/30"),
+    }
+    cleaned_hosts, new_hosts = target.defrag()
+    assert new_hosts == set()
+    assert cleaned_hosts == {ipaddress.ip_network("192.168.0.0/30")}
+    assert target.get("192.168.0.0") == "val1"
+    assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
+
+    # basic duplicate removal with different custom data
+    target = RadixTarget()
+    target.insert("192.168.0.0/28", "val1")
+    assert target.get("192.168.0.0") == "val1"
+    assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
+    target.insert("192.168.0.0/30", "val2")
+    assert target.get("192.168.0.0") == "val2"
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/28"),
+        ipaddress.ip_network("192.168.0.0/30"),
+    }
+    cleaned_hosts, new_hosts = target.defrag()
+    assert new_hosts == set()
+    assert cleaned_hosts == set()
+    assert target.get("192.168.0.0") == "val2"
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/28"),
+        ipaddress.ip_network("192.168.0.0/30"),
+    }
+
+    # multiple nested duplicates
+    target = RadixTarget()
+    target.insert("192.168.0.0/24", "val1")
+    target.insert("192.168.0.0/26", "val1")
+    target.insert("192.168.0.0/28", "val1")
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/24"),
+        ipaddress.ip_network("192.168.0.0/26"),
+        ipaddress.ip_network("192.168.0.0/28"),
+    }
+    assert target.get("192.168.0.0") == "val1"
+    assert target.get_host("192.168.0.0") == ipaddress.ip_network("192.168.0.0/28")
+    cleaned_hosts, new_hosts = target.defrag()
+    assert cleaned_hosts == {
+        ipaddress.ip_network("192.168.0.0/26"),
+        ipaddress.ip_network("192.168.0.0/28"),
+    }
+    assert target.hosts == {
+        ipaddress.ip_network("192.168.0.0/24"),
+    }
+    assert target.get("192.168.0.0") == "val1"
+    assert target.get_host("192.168.0.0") == ipaddress.ip_network("192.168.0.0/24")
 
     # Two mergeable subnets
     target = RadixTarget()
@@ -629,55 +653,99 @@ def test_defrag():
         "www.evilcorp.com",
     }
     assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/24")
-    return
 
-    assert target.hosts == {ipaddress.ip_network("192.168.0.0/28")}
-    assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/28")
-
+    # these nodes should not be merged because they have different data
     target = RadixTarget()
-    # defrag should work when values are the same
-    target.add("192.168.0.0/28", "val")
-    target.add("192.168.0.128/28", "val")
+    target.insert("192.168.0.0/25", "val1")
+    target.insert("192.168.0.128/25", "val2")
+    cleaned_hosts, new_hosts = target.defrag()
+    assert cleaned_hosts == set()
+    assert new_hosts == set()
+    assert target.get("192.168.0.0") == "val1"
+    assert target.get("192.168.0.128") == "val2"
+
+    # recursive defrag
+    target = RadixTarget()
+    target.insert("192.168.0.0/25")
+    target.insert("192.168.0.128/27")
+    target.insert("192.168.0.160/27")
+    target.insert("192.168.0.192/27")
+    target.insert("192.168.0.224/28")
+    target.insert("192.168.0.240/29")
+    target.insert("192.168.0.248/30")
+    target.insert("192.168.0.252/31")
+    target.insert("192.168.0.254")
+    target.insert("192.168.0.255")
     assert target.hosts == {
-        ipaddress.ip_network("192.168.0.0/28"),
-        ipaddress.ip_network("192.168.0.128/28"),
+        ipaddress.ip_network("192.168.0.0/25"),
+        ipaddress.ip_network("192.168.0.128/27"),
+        ipaddress.ip_network("192.168.0.160/27"),
+        ipaddress.ip_network("192.168.0.192/27"),
+        ipaddress.ip_network("192.168.0.224/28"),
+        ipaddress.ip_network("192.168.0.240/29"),
+        ipaddress.ip_network("192.168.0.248/30"),
+        ipaddress.ip_network("192.168.0.252/31"),
+        ipaddress.ip_network("192.168.0.254/32"),
+        ipaddress.ip_network("192.168.0.255/32"),
     }
-    assert target.get("192.168.0.0") == "val"
-    assert target.get("192.168.0.128") == "val"
-
-    all_nodes = target.ipv4_tree.all_nodes
-    all_nodes_with_host = [node for node in all_nodes if node.host is not None]
-    assert len(all_nodes_with_host) == 2
-    assert all_nodes_with_host[0].host == ipaddress.ip_network("192.168.0.0/28")
-    assert all_nodes_with_host[1].host == ipaddress.ip_network("192.168.0.128/28")
-    assert all_nodes_with_host[0].data == "val"
-    assert all_nodes_with_host[1].data == "val"
-
     cleaned_hosts, new_hosts = target.defrag()
     assert cleaned_hosts == {
-        ipaddress.ip_network("192.168.0.0/28"),
-        ipaddress.ip_network("192.168.0.128/28"),
+        ipaddress.ip_network("192.168.0.0/25"),
+        ipaddress.ip_network("192.168.0.128/27"),
+        ipaddress.ip_network("192.168.0.160/27"),
+        ipaddress.ip_network("192.168.0.192/27"),
+        ipaddress.ip_network("192.168.0.224/28"),
+        ipaddress.ip_network("192.168.0.240/29"),
+        ipaddress.ip_network("192.168.0.248/30"),
+        ipaddress.ip_network("192.168.0.252/31"),
+        ipaddress.ip_network("192.168.0.254/32"),
+        ipaddress.ip_network("192.168.0.255/32"),
     }
     assert new_hosts == {ipaddress.ip_network("192.168.0.0/24")}
-
-    assert target.hosts == {ipaddress.ip_network("192.168.0.0/24")}
-    assert {node.host: node.data for node in target.ipv4_tree.root.children.values()} == {
-        ipaddress.ip_network("192.168.0.0/24"): "val"
-    }
-    # defrag should also work when all the values are equal to their keys
-    target = RadixTarget()
-    target.add("192.168.0.0/28")
-    target.add("192.168.0.128/28")
+    assert target.get("192.168.0.255") == ipaddress.ip_network("192.168.0.0/24")
     assert target.hosts == {
-        ipaddress.ip_network("192.168.0.0/28"),
-        ipaddress.ip_network("192.168.0.128/28"),
+        ipaddress.ip_network("192.168.0.0/24"),
     }
-    assert {node.host: node.data for node in target.ipv4_tree.root.children.values()} == {
-        ipaddress.ip_network("192.168.0.0/28"): ipaddress.ip_network("192.168.0.0/28"),
-        ipaddress.ip_network("192.168.0.128/28"): ipaddress.ip_network("192.168.0.128/28"),
+
+    # same test but for IPv6
+    target = RadixTarget()
+    target.insert("dead:beef::/121")
+    target.insert("dead:beef::80/123")
+    target.insert("dead:beef::a0/123")
+    target.insert("dead:beef::c0/123")
+    target.insert("dead:beef::e0/124")
+    target.insert("dead:beef::f0/125")
+    target.insert("dead:beef::f8/126")
+    target.insert("dead:beef::fc/127")
+    target.insert("dead:beef::fe")
+    target.insert("dead:beef::ff")
+    assert target.hosts == {
+        ipaddress.ip_network("dead:beef::/121"),
+        ipaddress.ip_network("dead:beef::80/123"),
+        ipaddress.ip_network("dead:beef::a0/123"),
+        ipaddress.ip_network("dead:beef::c0/123"),
+        ipaddress.ip_network("dead:beef::e0/124"),
+        ipaddress.ip_network("dead:beef::f0/125"),
+        ipaddress.ip_network("dead:beef::f8/126"),
+        ipaddress.ip_network("dead:beef::fc/127"),
+        ipaddress.ip_network("dead:beef::fe/128"),
+        ipaddress.ip_network("dead:beef::ff/128"),
     }
-    target.defrag()
-    assert target.hosts == {ipaddress.ip_network("192.168.0.0/24")}
-    assert target.ipv4_tree.root.children == {
-        ipaddress.ip_network("192.168.0.0/24"): ipaddress.ip_network("192.168.0.0/24")
+    cleaned_hosts, new_hosts = target.defrag()
+    assert cleaned_hosts == {
+        ipaddress.ip_network("dead:beef::/121"),
+        ipaddress.ip_network("dead:beef::80/123"),
+        ipaddress.ip_network("dead:beef::a0/123"),
+        ipaddress.ip_network("dead:beef::c0/123"),
+        ipaddress.ip_network("dead:beef::e0/124"),
+        ipaddress.ip_network("dead:beef::f0/125"),
+        ipaddress.ip_network("dead:beef::f8/126"),
+        ipaddress.ip_network("dead:beef::fc/127"),
+        ipaddress.ip_network("dead:beef::fe/128"),
+        ipaddress.ip_network("dead:beef::ff/128"),
+    }
+    assert new_hosts == {ipaddress.ip_network("dead:beef::/120")}
+    assert target.get("dead:beef::ff") == ipaddress.ip_network("dead:beef::/120")
+    assert target.hosts == {
+        ipaddress.ip_network("dead:beef::/120"),
     }

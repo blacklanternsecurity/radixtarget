@@ -171,14 +171,10 @@ class RadixTarget:
     def defrag(self):
         cleaned_hosts = set()
         new_hosts = set()
-        while 1:
-            for tree in [self.ipv4_tree, self.ipv6_tree]:
-                pruned = tree.prune()
-                _cleaned, _new = tree.defrag()
-                cleaned_hosts.update(_cleaned)
-                new_hosts.update(_new)
-            if not pruned and not _cleaned and not _new:
-                break
+        for tree in [self.ipv4_tree, self.ipv6_tree]:
+            _cleaned, _new = tree.defrag()
+            cleaned_hosts.update(_cleaned)
+            new_hosts.update(_new)
         self._hosts.difference_update(cleaned_hosts)
         self._hosts.update(new_hosts)
         return cleaned_hosts, new_hosts

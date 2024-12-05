@@ -91,6 +91,8 @@ def merge_subnets(network1, network2):
         network1, network2 = network2, network1
     if not network1.prefixlen == network2.prefixlen:
         raise ValueError(f"Cannot merge networks with different prefix lengths: {network1} and {network2}")
-    if not network1.broadcast_address + 1 == network2.network_address:
-        raise ValueError(f"Cannot merge networks {network1} and {network2} because they are not adjacent")
-    return network1.supernet(1)
+    supernet1 = network1.supernet(1)
+    supernet2 = network2.supernet(1)
+    if supernet1 != supernet2:
+        raise ValueError(f"Cannot merge networks {network1} and {network2} because their supernets are not the same")
+    return supernet1

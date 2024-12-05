@@ -36,7 +36,7 @@ class RadixTreeNode:
                     new_pruned += 1
                     continue
                 new_pruned += child.prune()
-            if not new_pruned:
+            if new_pruned == 0:
                 break
             pruned += new_pruned
         return pruned
