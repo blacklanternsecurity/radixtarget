@@ -88,9 +88,9 @@ jobs:
         if: github.ref == 'refs/heads/master'
         uses: pypa/gh-action-pypi-publish@release/v1.5
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-      - name: Tag the release if major or minor version changed
-        if: github.ref == 'refs/heads/master'
+          password: ${{ secrets.PYPI_TOKEN }}
+      - name: Tag the release
+        if: github.ref == 'refs/heads/master' && env.VERSION_CHANGE == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
