@@ -82,15 +82,15 @@ jobs:
           fi
         shell: bash
       - name: Build PyPi package
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         run: python -m build
       - name: Publish PyPi package
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         uses: pypa/gh-action-pypi-publish@release/v1.5
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
       - name: Tag the release if major or minor version changed
-        if: github.ref == 'refs/heads/main' && env.VERSION_CHANGE == 'true'
+        if: github.ref == 'refs/heads/master'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
