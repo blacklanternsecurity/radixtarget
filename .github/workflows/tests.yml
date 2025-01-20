@@ -90,7 +90,7 @@ jobs:
         run: python -m build
       - name: Publish PyPi package
         if: github.ref == 'refs/heads/master'
-        uses: pypa/gh-action-pypi-publish@release/v1.5
+        uses: pypa/gh-action-pypi-publish@release/v1.12
         with:
           password: ${{ secrets.PYPI_TOKEN }}
       - name: Tag the release
