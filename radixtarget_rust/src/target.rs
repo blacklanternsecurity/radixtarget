@@ -121,6 +121,24 @@ impl RadixTarget {
     pub fn prune(&mut self) -> usize {
         self.dns.prune() + self.ipv4.prune() + self.ipv6.prune()
     }
+
+    pub fn defrag(&mut self) -> (std::collections::HashMap<u64, String>, std::collections::HashMap<u64, String>) {
+        use std::collections::HashMap;
+        let (cleaned_v4, new_v4) = self.ipv4.defrag();
+        let (cleaned_v6, new_v6) = self.ipv6.defrag();
+        let mut cleaned = HashMap::new();
+        let mut new = HashMap::new();
+        cleaned.extend(cleaned_v4);
+        cleaned.extend(cleaned_v6);
+        new.extend(new_v4);
+        new.extend(new_v6);
+        // Update self.hosts: remove cleaned values, add new values
+        let cleaned_values: std::collections::HashSet<_> = cleaned.values().cloned().collect();
+        let new_values: std::collections::HashSet<_> = new.values().cloned().collect();
+        self.hosts.retain(|h| !cleaned_values.contains(h));
+        self.hosts.extend(new_values.iter().cloned());
+        (cleaned, new)
+    }
 }
 
 impl PartialEq for RadixTarget {
@@ -142,6 +160,7 @@ mod tests {
     use ipnet::IpNet;
     use std::str::FromStr;
     use std::hash::{Hash, Hasher};
+    use std::collections::{HashSet};
 
     fn hash_for_ipnet(net: &str) -> u64 {
         let ipnet = IpNet::from_str(net).unwrap();
@@ -156,6 +175,10 @@ mod tests {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         canonical.hash(&mut hasher);
         hasher.finish()
+    }
+
+    fn set_of_strs<I: IntoIterator<Item=String>>(vals: I) -> HashSet<String> {
+        vals.into_iter().collect()
     }
 
     #[test]
@@ -319,5 +342,175 @@ mod tests {
         // Pruning again should do nothing
         let pruned2 = rt.dns.prune();
         assert_eq!(pruned2, 0);
+    }
+
+    #[test]
+    fn test_defrag_basic_merge() {
+        // Two mergeable subnets
+        let mut target = RadixTarget::new(false);
+        target.insert("192.168.0.0/25");
+        target.insert("192.168.0.128/25");
+        target.insert("www.evilcorp.com");
+        let expected_hosts: HashSet<String> = [
+            "192.168.0.0/25",
+            "192.168.0.128/25",
+            "www.evilcorp.com"
+        ].iter().map(|s| s.to_string()).collect();
+        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
+        let (cleaned, new) = target.defrag();
+        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
+        let new_set: HashSet<String> = new.values().cloned().collect();
+        let expected_cleaned: HashSet<String> = [
+            "192.168.0.0/25",
+            "192.168.0.128/25"
+        ].iter().map(|s| s.to_string()).collect();
+        let expected_new: HashSet<String> = ["192.168.0.0/24".to_string()].iter().cloned().collect();
+        assert_eq!(cleaned_set, expected_cleaned);
+        assert_eq!(new_set, expected_new);
+        let expected_hosts_after: HashSet<String> = [
+            "192.168.0.0/24",
+            "www.evilcorp.com"
+        ].iter().map(|s| s.to_string()).collect();
+        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
+    }
+
+    #[test]
+    fn test_defrag_recursive_merge_ipv4() {
+        let mut target = RadixTarget::new(false);
+        for net in [
+            "192.168.0.0/25",
+            "192.168.0.128/27",
+            "192.168.0.160/27",
+            "192.168.0.192/27",
+            "192.168.0.224/28",
+            "192.168.0.240/29",
+            "192.168.0.248/30",
+            "192.168.0.252/31",
+            "192.168.0.254/32",
+            "192.168.0.255/32"
+        ].iter() {
+            target.insert(net);
+        }
+        let expected_hosts: HashSet<String> = [
+            "192.168.0.0/25",
+            "192.168.0.128/27",
+            "192.168.0.160/27",
+            "192.168.0.192/27",
+            "192.168.0.224/28",
+            "192.168.0.240/29",
+            "192.168.0.248/30",
+            "192.168.0.252/31",
+            "192.168.0.254/32",
+            "192.168.0.255/32"
+        ].iter().map(|s| s.to_string()).collect();
+        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
+        let (cleaned, new) = target.defrag();
+        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
+        let new_set: HashSet<String> = new.values().cloned().collect();
+        let expected_cleaned: HashSet<String> = expected_hosts.clone();
+        let expected_new: HashSet<String> = ["192.168.0.0/24".to_string()].iter().cloned().collect();
+        assert_eq!(cleaned_set, expected_cleaned);
+        assert_eq!(new_set, expected_new);
+        let expected_hosts_after: HashSet<String> = ["192.168.0.0/24".to_string()].iter().cloned().collect();
+        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
+    }
+
+    #[test]
+    fn test_defrag_recursive_merge_ipv6() {
+        let mut target = RadixTarget::new(false);
+        for net in [
+            "dead:beef::/121",
+            "dead:beef::80/123",
+            "dead:beef::a0/123",
+            "dead:beef::c0/123",
+            "dead:beef::e0/124",
+            "dead:beef::f0/125",
+            "dead:beef::f8/126",
+            "dead:beef::fc/127",
+            "dead:beef::fe/128",
+            "dead:beef::ff/128"
+        ].iter() {
+            target.insert(net);
+        }
+        let expected_hosts: HashSet<String> = [
+            "dead:beef::/121",
+            "dead:beef::80/123",
+            "dead:beef::a0/123",
+            "dead:beef::c0/123",
+            "dead:beef::e0/124",
+            "dead:beef::f0/125",
+            "dead:beef::f8/126",
+            "dead:beef::fc/127",
+            "dead:beef::fe/128",
+            "dead:beef::ff/128"
+        ].iter().map(|s| s.to_string()).collect();
+        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
+        let (cleaned, new) = target.defrag();
+        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
+        let new_set: HashSet<String> = new.values().cloned().collect();
+        let expected_cleaned: HashSet<String> = expected_hosts.clone();
+        let expected_new: HashSet<String> = ["dead:beef::/120".to_string()].iter().cloned().collect();
+        assert_eq!(cleaned_set, expected_cleaned);
+        assert_eq!(new_set, expected_new);
+        let expected_hosts_after: HashSet<String> = ["dead:beef::/120".to_string()].iter().cloned().collect();
+        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
+    }
+
+    #[test]
+    fn test_defrag_small_recursive() {
+        let mut target = RadixTarget::new(false);
+        // Four /26s covering 192.168.1.0/25 and 192.168.1.128/25
+        target.insert("192.168.1.0/26");
+        target.insert("192.168.1.64/26");
+        target.insert("192.168.1.128/26");
+        target.insert("192.168.1.192/26");
+        target.insert("192.168.0.0/24");
+        // Single defrag: should merge the /26s into /25s, then into a /24, then merge the two /24s into a /23
+        let (cleaned, new) = target.defrag();
+        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
+        let new_set: HashSet<String> = new.values().cloned().collect();
+        let expected_cleaned: HashSet<String> = [
+            "192.168.1.0/26",
+            "192.168.1.64/26",
+            "192.168.1.128/26",
+            "192.168.1.192/26",
+            "192.168.0.0/24",
+        ].iter().map(|s| s.to_string()).collect();
+        let expected_new: HashSet<String> = ["192.168.0.0/23".to_string()].iter().cloned().collect();
+        assert_eq!(cleaned_set, expected_cleaned);
+        assert_eq!(new_set, expected_new);
+    }
+
+    #[test]
+    fn test_insert_malformed_data() {
+        let mut rt = RadixTarget::new(false);
+        let malformed_inputs = [
+            "999.999.999.999", // invalid IPv4
+            "256.256.256.256/33", // invalid IPv4 CIDR
+            "::gggg", // invalid IPv6
+            "dead::beef::cafe", // invalid IPv6
+            "1.2.3.4/abc", // invalid CIDR suffix
+            "-example.com", // invalid DNS (leading hyphen)
+            "example..com", // double dot
+            ".example.com", // leading dot
+            "example.com-", // trailing hyphen
+            "exa mple.com", // space in domain
+            "", // empty string
+            "*.*.*.*", // wildcard nonsense
+            "[::1]", // brackets not allowed
+            "1.2.3.4/", // trailing slash
+            "com..", // trailing double dot
+            "...", // just dots
+            "foo@bar.com", // @ in domain
+            "1.2.3.4.5", // too many octets
+            "1234:5678:9abc:defg::1", // invalid hex in IPv6
+            "example_com", // underscore in domain
+        ];
+        for input in malformed_inputs.iter() {
+            // Should not panic, should insert as DNS fallback, or handle gracefully
+            let _ = rt.insert(input);
+            // Should not be retrievable as a valid IP or network
+            assert_eq!(rt.get(input), rt.dns.get(input), "Malformed input should only be in DNS tree: {}", input);
+        }
     }
 }

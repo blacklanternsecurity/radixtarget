@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use crate::base::{BaseNode, siphash};
 
@@ -36,6 +36,83 @@ impl Node {
             pruned += new_pruned;
         }
         pruned
+    }
+    // defrag the node by merging IP networks if they make up a contiguous block.
+    // returns a tuple of (cleaned_networks, new_networks)
+    pub fn defrag(&mut self) -> (HashMap<u64, String>, HashMap<u64, String>) {
+        let mut cleaned = HashMap::new();
+        let mut new = HashMap::new();
+
+        // Recursively defrag children first and accumulate all cleaned/new
+        for child in self.children.values_mut() {
+            let (c, n) = child.defrag();
+            cleaned.extend(c);
+            new.extend(n);
+        }
+        println!("DEBUG: After recursion at node {:?}, cleaned: {:?}, new: {:?}", self.network, cleaned.values().collect::<Vec<_>>(), new.values().collect::<Vec<_>>());
+
+        // Try to merge children if possible
+        if self.children.len() == 2 {
+            let mut iter = self.children.values_mut();
+            let left = iter.next().unwrap();
+            let right = iter.next().unwrap();
+            if let (Some(left_net), Some(right_net)) = (&left.network, &right.network) {
+                if left_net.prefix_len() == right_net.prefix_len() &&
+                   (matches!(left_net, IpNet::V4(_)) && matches!(right_net, IpNet::V4(_)) ||
+                    matches!(left_net, IpNet::V6(_)) && matches!(right_net, IpNet::V6(_))) {
+                    let prefix = left_net.prefix_len();
+                    let supernet = match (left_net, right_net) {
+                        (IpNet::V4(l), IpNet::V4(r)) => {
+                            if prefix > 0 && prefix < 32 {
+                                println!("DEBUG: IPv4 merge, prefix = {}", prefix);
+                                let mask = !(0xffffffffu32 >> prefix);
+                                let l_addr = u32::from(l.network());
+                                let r_addr = u32::from(r.network());
+                                println!("DEBUG: IPv4 merge, l_addr = {}, r_addr = {}", l_addr, r_addr);
+                                if (l_addr ^ r_addr) == (1 << (32 - prefix)) {
+                                    let min_addr = l_addr.min(r_addr) & mask;
+                                    Some(IpNet::V4(Ipv4Net::new(min_addr.into(), prefix - 1).unwrap()))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        (IpNet::V6(l), IpNet::V6(r)) => {
+                            if prefix > 0 && prefix < 128 {
+                                println!("DEBUG: IPv6 merge, prefix = {}", prefix);
+                                let mask = !(0xffffffffffffffffffffffffffffffffu128 >> prefix);
+                                let l_addr = u128::from(l.network());
+                                let r_addr = u128::from(r.network());
+                                println!("DEBUG: IPv6 merge, l_addr = {}, r_addr = {}", l_addr, r_addr);
+                                if (l_addr ^ r_addr) == (1 << (128 - prefix)) {
+                                    let min_addr = l_addr.min(r_addr) & mask;
+                                    Some(IpNet::V6(Ipv6Net::new(min_addr.into(), prefix - 1).unwrap()))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
+                    if let Some(supernet) = supernet {
+                        let left_hash = siphash(left_net);
+                        let right_hash = siphash(right_net);
+                        let supernet_hash = siphash(&supernet);
+                        cleaned.insert(left_hash, left_net.to_string());
+                        cleaned.insert(right_hash, right_net.to_string());
+                        new.insert(supernet_hash, supernet.to_string());
+                        self.children.clear();
+                        self.network = Some(supernet);
+                        println!("DEBUG: After merge at node {:?}, cleaned: {:?}, new: {:?}", self.network, cleaned.values().collect::<Vec<_>>(), new.values().collect::<Vec<_>>());
+                    }
+                }
+            }
+        }
+        (cleaned, new)
     }
 }
 
@@ -108,6 +185,31 @@ impl IpRadixTree {
     }
     pub fn prune(&mut self) -> usize {
         self.root.prune()
+    }
+    pub fn defrag(&mut self) -> (HashMap<u64, String>, HashMap<u64, String>) {
+        let mut cleaned = HashMap::new();
+        let mut new = HashMap::new();
+        loop {
+            let mut pruned = self.prune();
+            // No clean_duplicates implemented in Rust version, skip
+            pruned += self.prune();
+            let (frag_cleaned, frag_new) = self.root.defrag();
+            pruned += self.prune();
+            if pruned == 0 && frag_cleaned.is_empty() && frag_new.is_empty() {
+                break;
+            }
+            cleaned.extend(frag_cleaned);
+            new.extend(frag_new);
+        }
+        // Remove intermediate hosts (present in both cleaned and new)
+        let intermediate: HashSet<_> = cleaned.keys().collect::<HashSet<_>>()
+            .intersection(&new.keys().collect()).copied().collect();
+        let to_remove: Vec<u64> = intermediate.into_iter().copied().collect();
+        for k in to_remove {
+            cleaned.remove(&k);
+            new.remove(&k);
+        }
+        (cleaned, new)
     }
 }
 
@@ -502,5 +604,52 @@ mod tests {
         // Oops, we clobbered our IPv4 network. This is expected, and the reason why we maintain 2 separate trees.
         assert_eq!(tree.get(&IpNet::from_str("1.0.0.1/30").unwrap()), None);
         assert_eq!(tree.get(&IpNet::from_str("100::1/30").unwrap()), Some(expected_hash(&net6)));
+    }
+
+    #[test]
+    fn test_defrag_merge_two_children() {
+        // Manually construct a node with two children: 192.168.0.0/24 and 192.168.1.0/24
+        let net1 = IpNet::from_str("192.168.0.0/24").unwrap();
+        let net2 = IpNet::from_str("192.168.1.0/24").unwrap();
+        let supernet = IpNet::from_str("192.168.0.0/23").unwrap();
+        let mut parent = Node::new();
+        let mut child1 = Box::new(Node::new());
+        child1.network = Some(net1.clone());
+        let mut child2 = Box::new(Node::new());
+        child2.network = Some(net2.clone());
+        parent.children.insert(0, child1);
+        parent.children.insert(1, child2);
+        let (cleaned, new) = parent.defrag();
+        // The cleaned set should contain the two /24s, the new set should contain the /23
+        assert!(cleaned.values().any(|s| s == &net1.to_string()));
+        assert!(cleaned.values().any(|s| s == &net2.to_string()));
+        assert!(new.values().any(|s| s == &supernet.to_string()));
+        // The parent node should now have network = Some(supernet) and no children
+        assert_eq!(parent.network, Some(supernet));
+        assert!(parent.children.is_empty());
+    }
+
+    #[test]
+    fn test_ipradix_defrag_merge() {
+        let mut tree = IpRadixTree::new();
+        let net1 = IpNet::from_str("192.168.0.0/24").unwrap();
+        let net2 = IpNet::from_str("192.168.1.0/24").unwrap();
+        let supernet = IpNet::from_str("192.168.0.0/23").unwrap();
+        tree.insert(net1.clone());
+        tree.insert(net2.clone());
+        // Before defrag, lookups should return the /24s
+        let ip1 = IpNet::from_str("192.168.0.1/32").unwrap();
+        let ip2 = IpNet::from_str("192.168.1.1/32").unwrap();
+        assert_eq!(tree.get(&ip1), Some(siphash(&net1)));
+        assert_eq!(tree.get(&ip2), Some(siphash(&net2)));
+        // Defrag
+        let (cleaned, new) = tree.defrag();
+        // The cleaned set should contain the two /24s, the new set should contain the /23
+        assert!(cleaned.values().any(|s| s == &net1.to_string()));
+        assert!(cleaned.values().any(|s| s == &net2.to_string()));
+        assert!(new.values().any(|s| s == &supernet.to_string()));
+        // After defrag, lookups should return the /23
+        assert_eq!(tree.get(&ip1), Some(siphash(&supernet)));
+        assert_eq!(tree.get(&ip2), Some(siphash(&supernet)));
     }
 }
