@@ -1,0 +1,8 @@
+[package]
+name = "radixtarget"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+idna = "1.0.3"
+ipnet = "2.7"
