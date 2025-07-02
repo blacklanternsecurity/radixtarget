@@ -1,7 +1,7 @@
 use crate::dns::DnsRadixTree;
 use crate::ip::IpRadixTree;
 use ipnet::{IpNet};
-use std::collections::{HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::net::IpAddr;
 
@@ -82,7 +82,6 @@ impl RadixTarget {
 
     /// Delete a target (IP network, IP address, or DNS name). Returns true if deleted.
     pub fn delete(&mut self, value: &str) -> bool {
-        use std::net::IpAddr;
         let deleted = if let Ok(ipnet) = value.parse::<IpNet>() {
             match ipnet {
                 IpNet::V4(_) => self.ipv4.delete(ipnet),
@@ -102,7 +101,6 @@ impl RadixTarget {
 
     /// Get the most specific match for a target (IP network, IP address, or DNS name). Returns the SipHash if found.
     pub fn get(&self, value: &str) -> Option<u64> {
-        use std::net::IpAddr;
         if let Ok(ipnet) = value.parse::<IpNet>() {
             match ipnet {
                 IpNet::V4(_) => self.ipv4.get(&ipnet),
@@ -122,21 +120,22 @@ impl RadixTarget {
         self.dns.prune() + self.ipv4.prune() + self.ipv6.prune()
     }
 
-    pub fn defrag(&mut self) -> (std::collections::HashMap<u64, String>, std::collections::HashMap<u64, String>) {
-        use std::collections::HashMap;
+    // NOTE: This is a potentially destructive operation
+    // Since in the rust implementation, only the data reference is stored for each node,
+    // defrag will indiscriminately merge nodes regardless of their data
+    // For this reason, this method is not used by the Python implementation, which implements its own defrag logic
+    pub fn defrag(&mut self) -> (HashSet<String>, HashSet<String>) {
         let (cleaned_v4, new_v4) = self.ipv4.defrag();
         let (cleaned_v6, new_v6) = self.ipv6.defrag();
-        let mut cleaned = HashMap::new();
-        let mut new = HashMap::new();
+        let mut cleaned = HashSet::new();
+        let mut new = HashSet::new();
         cleaned.extend(cleaned_v4);
         cleaned.extend(cleaned_v6);
         new.extend(new_v4);
         new.extend(new_v6);
         // Update self.hosts: remove cleaned values, add new values
-        let cleaned_values: std::collections::HashSet<_> = cleaned.values().cloned().collect();
-        let new_values: std::collections::HashSet<_> = new.values().cloned().collect();
-        self.hosts.retain(|h| !cleaned_values.contains(h));
-        self.hosts.extend(new_values.iter().cloned());
+        self.hosts.retain(|h| !cleaned.contains(h));
+        self.hosts.extend(new.iter().cloned());
         (cleaned, new)
     }
 }
@@ -358,15 +357,13 @@ mod tests {
         ].iter().map(|s| s.to_string()).collect();
         assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
         let (cleaned, new) = target.defrag();
-        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
-        let new_set: HashSet<String> = new.values().cloned().collect();
         let expected_cleaned: HashSet<String> = [
             "192.168.0.0/25",
             "192.168.0.128/25"
         ].iter().map(|s| s.to_string()).collect();
         let expected_new: HashSet<String> = ["192.168.0.0/24".to_string()].iter().cloned().collect();
-        assert_eq!(cleaned_set, expected_cleaned);
-        assert_eq!(new_set, expected_new);
+        assert_eq!(cleaned, expected_cleaned);
+        assert_eq!(new, expected_new);
         let expected_hosts_after: HashSet<String> = [
             "192.168.0.0/24",
             "www.evilcorp.com"
@@ -405,12 +402,10 @@ mod tests {
         ].iter().map(|s| s.to_string()).collect();
         assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
         let (cleaned, new) = target.defrag();
-        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
-        let new_set: HashSet<String> = new.values().cloned().collect();
         let expected_cleaned: HashSet<String> = expected_hosts.clone();
         let expected_new: HashSet<String> = ["192.168.0.0/24".to_string()].iter().cloned().collect();
-        assert_eq!(cleaned_set, expected_cleaned);
-        assert_eq!(new_set, expected_new);
+        assert_eq!(cleaned, expected_cleaned);
+        assert_eq!(new, expected_new);
         let expected_hosts_after: HashSet<String> = ["192.168.0.0/24".to_string()].iter().cloned().collect();
         assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
     }
@@ -446,12 +441,10 @@ mod tests {
         ].iter().map(|s| s.to_string()).collect();
         assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
         let (cleaned, new) = target.defrag();
-        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
-        let new_set: HashSet<String> = new.values().cloned().collect();
         let expected_cleaned: HashSet<String> = expected_hosts.clone();
         let expected_new: HashSet<String> = ["dead:beef::/120".to_string()].iter().cloned().collect();
-        assert_eq!(cleaned_set, expected_cleaned);
-        assert_eq!(new_set, expected_new);
+        assert_eq!(cleaned, expected_cleaned);
+        assert_eq!(new, expected_new);
         let expected_hosts_after: HashSet<String> = ["dead:beef::/120".to_string()].iter().cloned().collect();
         assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
     }
@@ -467,8 +460,6 @@ mod tests {
         target.insert("192.168.0.0/24");
         // Single defrag: should merge the /26s into /25s, then into a /24, then merge the two /24s into a /23
         let (cleaned, new) = target.defrag();
-        let cleaned_set: HashSet<String> = cleaned.values().cloned().collect();
-        let new_set: HashSet<String> = new.values().cloned().collect();
         let expected_cleaned: HashSet<String> = [
             "192.168.1.0/26",
             "192.168.1.64/26",
@@ -477,8 +468,8 @@ mod tests {
             "192.168.0.0/24",
         ].iter().map(|s| s.to_string()).collect();
         let expected_new: HashSet<String> = ["192.168.0.0/23".to_string()].iter().cloned().collect();
-        assert_eq!(cleaned_set, expected_cleaned);
-        assert_eq!(new_set, expected_new);
+        assert_eq!(cleaned, expected_cleaned);
+        assert_eq!(new, expected_new);
     }
 
     #[test]
