@@ -39,7 +39,8 @@ impl RadixTarget {
         // Invalidate cached hash
         *self.cached_hash.lock().unwrap() = None;
 
-        let normalized_value = if let Ok(ipnet) = value.parse::<IpNet>() {
+        // Hosts are now tracked directly in the trees, no need to maintain separate set
+        if let Ok(ipnet) = value.parse::<IpNet>() {
             match ipnet {
                 IpNet::V4(_) => self.ipv4.insert(ipnet),
                 IpNet::V6(_) => self.ipv6.insert(ipnet),
@@ -59,9 +60,7 @@ impl RadixTarget {
         } else {
             let canonical = normalize_dns(value);
             self.dns.insert(&canonical)
-        };
-        // Hosts are now tracked directly in the trees, no need to maintain separate set
-        normalized_value
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -176,40 +175,6 @@ impl RadixTarget {
         cleaned.extend(cleaned_v6);
         new.extend(new_v4);
         new.extend(new_v6);
-
-        // Create normalized versions of cleaned networks for host removal
-        let mut normalized_cleaned = HashSet::new();
-        for cleaned_host in &cleaned {
-            if let Ok(ipnet) = cleaned_host.parse::<IpNet>() {
-                // Normalize to single IP if it's a /32 or /128
-                let normalized = match ipnet {
-                    IpNet::V4(net) if net.prefix_len() == 32 => net.network().to_string(),
-                    IpNet::V6(net) if net.prefix_len() == 128 => net.network().to_string(),
-                    _ => cleaned_host.clone(),
-                };
-                normalized_cleaned.insert(normalized);
-            } else {
-                normalized_cleaned.insert(cleaned_host.clone());
-            }
-        }
-
-        // Update self.hosts: remove cleaned values (using normalized forms), add new values
-        self.hosts
-            .retain(|h| !normalized_cleaned.contains(h) && !cleaned.contains(h));
-
-        // Add new networks, normalizing single-host networks
-        for new_host in &new {
-            if let Ok(ipnet) = new_host.parse::<IpNet>() {
-                let normalized = match ipnet {
-                    IpNet::V4(net) if net.prefix_len() == 32 => net.network().to_string(),
-                    IpNet::V6(net) if net.prefix_len() == 128 => net.network().to_string(),
-                    _ => new_host.clone(),
-                };
-                self.hosts.insert(normalized);
-            } else {
-                self.hosts.insert(new_host.clone());
-            }
-        }
 
         (cleaned, new)
     }
@@ -464,7 +429,7 @@ mod tests {
                 .iter()
                 .map(|s| s.to_string())
                 .collect();
-        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
+        assert_eq!(target.hosts(), expected_hosts);
         let (cleaned, new) = target.defrag();
         let expected_cleaned: HashSet<String> = ["192.168.0.0/25", "192.168.0.128/25"]
             .iter()
@@ -478,7 +443,7 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
+        assert_eq!(target.hosts(), expected_hosts_after);
     }
 
     #[test]
@@ -515,7 +480,7 @@ mod tests {
         .iter()
         .map(|s| s.to_string())
         .collect();
-        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
+        assert_eq!(target.hosts(), expected_hosts);
         let (cleaned, new) = target.defrag();
         let expected_cleaned: HashSet<String> = [
             "192.168.0.0/25",
@@ -538,7 +503,7 @@ mod tests {
         assert_eq!(new, expected_new);
         let expected_hosts_after: HashSet<String> =
             ["192.168.0.0/24".to_string()].iter().cloned().collect();
-        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
+        assert_eq!(target.hosts(), expected_hosts_after);
     }
 
     #[test]
@@ -575,7 +540,7 @@ mod tests {
         .iter()
         .map(|s| s.to_string())
         .collect();
-        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts);
+        assert_eq!(target.hosts(), expected_hosts);
         let (cleaned, new) = target.defrag();
         let expected_cleaned: HashSet<String> = [
             "dead:beef::/121",
@@ -598,7 +563,7 @@ mod tests {
         assert_eq!(new, expected_new);
         let expected_hosts_after: HashSet<String> =
             ["dead:beef::/120".to_string()].iter().cloned().collect();
-        assert_eq!(set_of_strs(target.hosts.clone()), expected_hosts_after);
+        assert_eq!(target.hosts(), expected_hosts_after);
     }
 
     #[test]
@@ -918,11 +883,11 @@ mod tests {
         rt.insert("192.168.1.100");
         // Should be stored as /32 network
         assert!(
-            rt.hosts.contains("192.168.1.100/32"),
+            rt.hosts().contains("192.168.1.100/32"),
             "IPv4 address should be stored as /32"
         );
         assert!(
-            !rt.hosts.contains("192.168.1.100"),
+            !rt.hosts().contains("192.168.1.100"),
             "IPv4 address should not be stored without /32 suffix"
         );
 
@@ -930,33 +895,33 @@ mod tests {
         rt.insert("dead::beef");
         // Should be stored as /128 network
         assert!(
-            rt.hosts.contains("dead::beef/128"),
+            rt.hosts().contains("dead::beef/128"),
             "IPv6 address should be stored as /128"
         );
         assert!(
-            !rt.hosts.contains("dead::beef"),
+            !rt.hosts().contains("dead::beef"),
             "IPv6 address should not be stored without /128 suffix"
         );
 
         // Insert /32 IPv4 network explicitly
         rt.insert("10.0.0.1/32");
         assert!(
-            rt.hosts.contains("10.0.0.1/32"),
+            rt.hosts().contains("10.0.0.1/32"),
             "IPv4 /32 should be stored as /32"
         );
         assert!(
-            !rt.hosts.contains("10.0.0.1"),
+            !rt.hosts().contains("10.0.0.1"),
             "IPv4 /32 should not be stored without /32 suffix"
         );
 
         // Insert /128 IPv6 network explicitly
         rt.insert("cafe::1/128");
         assert!(
-            rt.hosts.contains("cafe::1/128"),
+            rt.hosts().contains("cafe::1/128"),
             "IPv6 /128 should be stored as /128"
         );
         assert!(
-            !rt.hosts.contains("cafe::1"),
+            !rt.hosts().contains("cafe::1"),
             "IPv6 /128 should not be stored without /128 suffix"
         );
 
@@ -964,24 +929,30 @@ mod tests {
         rt.insert("10.0.0.0/8");
         rt.insert("cafe::/64");
         assert!(
-            rt.hosts.contains("10.0.0.0/8"),
+            rt.hosts().contains("10.0.0.0/8"),
             "IPv4 network should remain as-is"
         );
         assert!(
-            rt.hosts.contains("cafe::/64"),
+            rt.hosts().contains("cafe::/64"),
             "IPv6 network should remain as-is"
         );
 
         // Insert DNS name (should remain as-is)
         rt.insert("example.com");
         assert!(
-            rt.hosts.contains("example.com"),
+            rt.hosts().contains("example.com"),
             "DNS name should remain as-is"
         );
 
         // Verify that searching works correctly with normalization
-        assert!(rt.contains("192.168.1.100"), "Should find IPv4 address");
-        assert!(rt.contains("dead::beef"), "Should find IPv6 address");
+        assert!(
+            rt.hosts().contains("192.168.1.100/32"),
+            "Should find IPv4 address"
+        );
+        assert!(
+            rt.hosts().contains("dead::beef/128"),
+            "Should find IPv6 address"
+        );
         assert_eq!(
             rt.get("192.168.1.100"),
             rt.get("192.168.1.100/32"),
@@ -1007,7 +978,8 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         assert_eq!(
-            rt.hosts, expected_hosts,
+            rt.hosts(),
+            expected_hosts,
             "Hosts should contain consistent network forms"
         );
     }
@@ -1047,6 +1019,8 @@ mod tests {
 
         // Insert unicode
         let host1 = rt.insert(unicode);
+
+        assert_eq!(rt.hosts(), set_of_strs(vec!["xn--caf-dma.com".to_string()]));
 
         // Should be able to find with both unicode and punycode
         assert_eq!(rt.get(unicode), host1.clone());

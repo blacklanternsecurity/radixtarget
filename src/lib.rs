@@ -7,8 +7,8 @@ pub mod node;
 pub mod target;
 pub mod utils;
 
-use target::RadixTarget;
 use dns::ScopeMode;
+use target::RadixTarget;
 use utils::host_size_key;
 
 #[pyclass]
@@ -25,9 +25,11 @@ impl PyRadixTarget {
             (false, false) => ScopeMode::Normal,
             (true, false) => ScopeMode::Strict,
             (false, true) => ScopeMode::Acl,
-            (true, true) => return Err(pyo3::exceptions::PyValueError::new_err(
-                "strict_scope and acl_mode are mutually exclusive"
-            )),
+            (true, true) => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "strict_scope and acl_mode are mutually exclusive",
+                ));
+            }
         };
         let mut inner = RadixTarget::new(&[], scope_mode);
         if let Some(hosts_list) = hosts {
