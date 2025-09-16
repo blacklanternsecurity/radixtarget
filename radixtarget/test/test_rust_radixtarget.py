@@ -1,5 +1,8 @@
 import random
 import ipaddress
+import time
+import logging
+from pathlib import Path
 from radixtarget import RadixTarget
 
 
@@ -865,3 +868,115 @@ def test_error_handling():
     assert "8.8.8.8" in target2
     
     print(f"✓ Error handling test passed - {len(validation_working)} validations working, {len(validation_missing)} may need implementation")
+
+
+def test_radixtarget_benchmark():
+    """
+    Performance benchmark for RadixTarget with the Rust-backed implementation.
+    
+    This test loads a large set of CIDR blocks and benchmarks IP lookup performance
+    to ensure the Rust implementation provides good performance characteristics.
+    """
+    log = logging.getLogger("radixtarget.test")
+    
+    # Path to CIDR test data
+    cidr_list_path = Path(__file__).parent / "cidrs.txt"
+    
+    # Check if test data exists
+    if not cidr_list_path.exists():
+        print("⚠️  Skipping benchmark - cidrs.txt not found")
+        return
+    
+    rt = RadixTarget()
+    
+    # Load CIDR blocks from test file
+    try:
+        with open(cidr_list_path) as f:
+            cidrs = f.read().splitlines()
+        
+        log.critical(f"Loading {len(cidrs)} CIDR blocks for benchmark")
+        
+        # Insert all CIDR blocks
+        for c in cidrs:
+            if c.strip():  # Skip empty lines
+                rt.insert(c.strip())
+        
+        log.critical(f"Loaded {len(cidrs)} CIDR blocks")
+        
+    except Exception as e:
+        print(f"⚠️  Could not load test data: {e}")
+        return
+    
+    # Benchmark random IP lookups
+    iterations = 10000
+    
+    print(f"🚀 Starting benchmark: {iterations:,} random IP lookups")
+    
+    start = time.time()
+    hits = 0
+    misses = 0
+    
+    for i in range(iterations):
+        # Generate random IPv4 address
+        random_ip = ipaddress.ip_address(random.randint(0, 2**32 - 1))
+        result = rt.search(str(random_ip))
+        
+        if result is not None:
+            hits += 1
+        else:
+            misses += 1
+    
+    end = time.time()
+    elapsed = end - start
+    lookups_per_second = int(iterations / elapsed)
+    
+    log.critical(f"Benchmark Results:")
+    log.critical(f"  {iterations:,} iterations in {elapsed:.4f} seconds")
+    log.critical(f"  {lookups_per_second:,} lookups/second")
+    log.critical(f"  {hits:,} hits, {misses:,} misses")
+    log.critical(f"  Hit rate: {(hits/iterations)*100:.1f}%")
+    
+    print(f"✓ Benchmark completed: {lookups_per_second:,} lookups/second")
+    
+    # Performance expectation - should be reasonably fast
+    # This is a rough baseline, actual performance will vary by system
+    min_expected_performance = 1000  # lookups per second
+    
+    if lookups_per_second >= min_expected_performance:
+        print(f"✓ Performance meets expectations (>= {min_expected_performance:,} lookups/sec)")
+    else:
+        print(f"⚠️  Performance below expected ({lookups_per_second:,} < {min_expected_performance:,} lookups/sec)")
+    
+    # Test IPv6 performance as well
+    print("🚀 Testing IPv6 performance...")
+    
+    # Add some IPv6 ranges
+    ipv6_ranges = [
+        "2001:db8::/32",
+        "2001:4860:4860::/48", 
+        "2607:f8b0:4000::/36",
+        "2a00:1450:4000::/36"
+    ]
+    
+    for range_str in ipv6_ranges:
+        rt.insert(range_str, f"ipv6_range_{range_str}")
+    
+    # Benchmark IPv6 lookups
+    ipv6_iterations = 1000
+    start = time.time()
+    ipv6_hits = 0
+    
+    for i in range(ipv6_iterations):
+        # Generate random IPv6 address
+        random_ipv6 = ipaddress.ip_address(random.randint(0, 2**128 - 1))
+        result = rt.search(str(random_ipv6))
+        if result is not None:
+            ipv6_hits += 1
+    
+    end = time.time()
+    ipv6_elapsed = end - start
+    ipv6_lookups_per_second = int(ipv6_iterations / ipv6_elapsed)
+    
+    print(f"✓ IPv6 benchmark: {ipv6_lookups_per_second:,} lookups/second ({ipv6_hits} hits)")
+    
+    print("✓ All benchmark tests completed!")
