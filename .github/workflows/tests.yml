@@ -32,6 +32,7 @@ jobs:
         run: |
           pip install poetry
           poetry install
+          poetry run maturin develop
       - name: Run tests
         run: |
           poetry run pytest --exitfirst --disable-warnings --log-cli-level=DEBUG --cov-report xml:cov.xml --cov=radixtarget .
