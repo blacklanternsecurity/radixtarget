@@ -1,5 +1,5 @@
 // base.rs: Shared base node trait for radix trees
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Trait for nodes that can be pruned (base node for radix trees).
 pub trait BaseNode {
@@ -7,6 +7,10 @@ pub trait BaseNode {
     fn is_dead(&self) -> bool;
     /// Returns mutable reference to children as a trait object
     fn children_mut(&mut self) -> &mut HashMap<u64, Box<Self>>
+    where
+        Self: Sized;
+    /// Returns immutable reference to children
+    fn children(&self) -> &HashMap<u64, Box<Self>>
     where
         Self: Sized;
     /// Returns the host as a string if present
@@ -42,6 +46,21 @@ pub trait BaseNode {
             }
         }
         self.children_mut().clear();
+        hosts
+    }
+
+    /// Get all hosts in this subtree
+    fn all_hosts(&self) -> HashSet<String>
+    where
+        Self: Sized,
+    {
+        let mut hosts = HashSet::new();
+        if let Some(host) = self.host_string() {
+            hosts.insert(host);
+        }
+        for child in self.children().values() {
+            hosts.extend(child.all_hosts());
+        }
         hosts
     }
 }

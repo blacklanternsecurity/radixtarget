@@ -92,6 +92,11 @@ impl IpRadixTree {
     pub fn prune(&mut self) -> usize {
         self.root.prune()
     }
+
+    /// Get all networks stored in the tree
+    pub fn hosts(&self) -> HashSet<String> {
+        self.root.all_hosts()
+    }
     /// Defrag the entire tree, merging mergeable networks. Returns (cleaned, new) as sets of strings, with overlap removed.
     pub fn defrag(&mut self) -> (HashSet<String>, HashSet<String>) {
         let mut cleaned = HashSet::new();
@@ -882,5 +887,110 @@ mod tests {
                 net_str
             );
         }
+    }
+
+    #[test]
+    fn test_acl_mode_skip_existing() {
+        let mut tree = IpRadixTree::new(true);
+
+        // First insertion should succeed
+        let net = IpNet::from_str("192.168.1.0/24").unwrap();
+        let result1 = tree.insert(net);
+        assert_eq!(result1, Some("192.168.1.0/24".to_string()));
+
+        // Second insertion of same network should return None
+        let result2 = tree.insert(net);
+        assert_eq!(result2, None);
+
+        // Different network should still work
+        let other_net = IpNet::from_str("10.0.0.0/8").unwrap();
+        let result3 = tree.insert(other_net);
+        assert_eq!(result3, Some("10.0.0.0/8".to_string()));
+
+        // Verify both networks are accessible
+        assert_eq!(tree.get(&net), Some("192.168.1.0/24".to_string()));
+        assert_eq!(tree.get(&other_net), Some("10.0.0.0/8".to_string()));
+    }
+
+    #[test]
+    fn test_acl_mode_skip_children() {
+        let mut tree = IpRadixTree::new(true);
+
+        // Insert parent network first
+        let parent = IpNet::from_str("192.168.0.0/16").unwrap();
+        assert_eq!(tree.insert(parent), Some("192.168.0.0/16".to_string()));
+        assert_eq!(tree.get(&parent), Some("192.168.0.0/16".to_string()));
+
+        // Insert child network should return None (already covered by parent)
+        let child = IpNet::from_str("192.168.1.0/24").unwrap();
+        assert_eq!(tree.insert(child), None);
+
+        // Get child network should return parent
+        assert_eq!(tree.get(&child), Some("192.168.0.0/16".to_string()));
+
+        // Test with IPv6 as well
+        let parent_v6 = IpNet::from_str("2001:db8::/32").unwrap();
+        assert_eq!(tree.insert(parent_v6), Some("2001:db8::/32".to_string()));
+
+        let child_v6 = IpNet::from_str("2001:db8:abcd::/48").unwrap();
+        assert_eq!(tree.insert(child_v6), None);
+        assert_eq!(tree.get(&child_v6), Some("2001:db8::/32".to_string()));
+    }
+
+    #[test]
+    fn test_acl_mode_clear_children() {
+        let mut tree = IpRadixTree::new(true);
+
+        // Insert child networks first
+        let child1 = IpNet::from_str("192.168.1.0/24").unwrap();
+        let child2 = IpNet::from_str("192.168.2.0/24").unwrap();
+        let child3 = IpNet::from_str("192.168.3.0/24").unwrap();
+
+        tree.insert(child1);
+        tree.insert(child2);
+        tree.insert(child3);
+
+        // Verify children are accessible
+        assert_eq!(tree.get(&child1), Some("192.168.1.0/24".to_string()));
+        assert_eq!(tree.get(&child2), Some("192.168.2.0/24".to_string()));
+        assert_eq!(tree.get(&child3), Some("192.168.3.0/24".to_string()));
+
+        // Insert parent network - should clear children
+        let parent = IpNet::from_str("192.168.0.0/16").unwrap();
+        let result = tree.insert(parent);
+        assert_eq!(result, Some("192.168.0.0/16".to_string()));
+
+        // Parent should be accessible
+        assert_eq!(tree.get(&parent), Some("192.168.0.0/16".to_string()));
+
+        // Children should now fall back to parent
+        assert_eq!(tree.get(&child1), Some("192.168.0.0/16".to_string()));
+        assert_eq!(tree.get(&child2), Some("192.168.0.0/16".to_string()));
+        assert_eq!(tree.get(&child3), Some("192.168.0.0/16".to_string()));
+
+        // Test with IPv6 as well
+        let child_v6_1 = IpNet::from_str("2001:db8:abcd::/48").unwrap();
+        let child_v6_2 = IpNet::from_str("2001:db8:beef::/48").unwrap();
+
+        tree.insert(child_v6_1);
+        tree.insert(child_v6_2);
+
+        assert_eq!(
+            tree.get(&child_v6_1),
+            Some("2001:db8:abcd::/48".to_string())
+        );
+        assert_eq!(
+            tree.get(&child_v6_2),
+            Some("2001:db8:beef::/48".to_string())
+        );
+
+        // Insert parent IPv6 network
+        let parent_v6 = IpNet::from_str("2001:db8::/32").unwrap();
+        let result_v6 = tree.insert(parent_v6);
+        assert_eq!(result_v6, Some("2001:db8::/32".to_string()));
+
+        // Children should fall back to parent
+        assert_eq!(tree.get(&child_v6_1), Some("2001:db8::/32".to_string()));
+        assert_eq!(tree.get(&child_v6_2), Some("2001:db8::/32".to_string()));
     }
 }

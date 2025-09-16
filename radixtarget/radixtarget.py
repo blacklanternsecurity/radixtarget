@@ -18,16 +18,15 @@ class RadixTarget:
             strict_scope (bool): Whether to consider subdomains of target domains in-scope
             acl_mode (bool): ACL mode - reject hosts already contained and delete children when adding parents
         """
+        # Store configuration for copying
+        self._strict_scope = strict_scope
+        self._acl_mode = acl_mode
+        
         # Initialize the Rust backend
-        self._rust_target = PyRadixTarget(strict_scope=strict_scope, acl_mode=acl_mode)
+        self._rust_target = PyRadixTarget(list(targets), strict_scope, acl_mode)
         
         # Python-based data storage: canonical_value -> data
         self._data = {}
-        
-        # Add any targets passed to constructor
-        if targets:
-            for target in targets:
-                self.add(target)
     
     def insert(self, value, data=None):
         """
@@ -51,8 +50,37 @@ class RadixTarget:
         return canonical_value
     
     def add(self, value, data=None):
-        """Alias for insert()"""
-        return self.insert(value, data=data)
+        """
+        Add a value, another RadixTarget, or a list of values.
+        
+        Args:
+            value: Can be a string, another RadixTarget, or a list of strings
+            data: Optional data to associate (only used for single string values)
+            
+        Returns:
+            str, list of str, or None: Canonical form(s) of inserted value(s)
+        """
+        # Handle different input types
+        if isinstance(value, RadixTarget):
+            # Merge another target into this one
+            results = []
+            for host in value:
+                host_str = str(host)
+                canonical = self.insert(host_str, value.get(host_str))
+                if canonical is not None:
+                    results.append(canonical)
+            return results
+        elif isinstance(value, (list, tuple, set)):
+            # Add multiple values
+            results = []
+            for item in value:
+                canonical = self.insert(str(item), data)
+                if canonical is not None:
+                    results.append(canonical)
+            return results
+        else:
+            # Single value
+            return self.insert(value, data=data)
     
     def put(self, value, data=None):
         """Alias for insert()"""
@@ -127,3 +155,35 @@ class RadixTarget:
     def __hash__(self):
         """Return hash of the target"""
         return self._rust_target.__hash__()
+    
+    @property
+    def hosts(self):
+        """Return an iterator over the hosts in the target"""
+        return iter(self._rust_target)
+    
+    @property
+    def hash(self):
+        """Return hash of the target as integer"""
+        return self._rust_target.__hash__()
+    
+    def __iter__(self):
+        """Return iterator over the hosts in the target"""
+        return iter(self._rust_target)
+    
+    def copy(self):
+        """
+        Create a copy of this RadixTarget.
+        
+        Returns:
+            RadixTarget: A new RadixTarget object with the same hosts and data
+        """
+        # Use efficient Rust-level copying
+        new_target = self.__class__()
+        new_target._rust_target = self._rust_target.copy()
+        new_target._strict_scope = self._strict_scope
+        new_target._acl_mode = self._acl_mode
+        
+        # Deep copy the Python data dictionary
+        new_target._data = self._data.copy()
+        
+        return new_target

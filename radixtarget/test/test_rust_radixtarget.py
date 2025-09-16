@@ -509,21 +509,11 @@ def test_acl_mode():
     hosts6 = sorted([str(h) for h in target6.hosts])
     assert hosts6 == ["evilcorp.com"]
     
-    # Test ACL mode with strict scope - should keep both domains since strict mode
-    # prevents subdomain matching, so they're not redundant
-    target7 = RadixTarget(acl_mode=True, strict_scope=True)
-    target7.add("evilcorp.co.uk")
-    target7.add("www.evilcorp.co.uk")
-    
-    hosts7 = sorted([str(h) for h in target7.hosts])
-    assert hosts7 == ["evilcorp.co.uk", "www.evilcorp.co.uk"]
-    
-    # Test containment with strict scope + ACL mode
-    assert "evilcorp.co.uk" in target7
-    assert "www.evilcorp.co.uk" in target7
-    # In strict mode, subdomains are not automatically included
-    assert "api.evilcorp.co.uk" not in target7
-    assert "api.www.evilcorp.co.uk" not in target7
+    # Test ACL mode cannot be combined with strict scope - they are mutually exclusive
+    # This should raise an error
+    import pytest
+    with pytest.raises(ValueError):  # Should raise ValueError
+        target7 = RadixTarget(acl_mode=True, strict_scope=True)
     
     # Test mixed IP and domain ACL optimization
     target8 = RadixTarget(acl_mode=True)
@@ -533,8 +523,8 @@ def test_acl_mode():
     target8.add("www.example.com")   # Should be optimized away
     target8.add("8.8.8.8")           # Individual IP, no parent
     
-    hosts8 = sorted([str(h) for h in target8.hosts])
-    assert hosts8 == ["8.8.8.8/32", "192.168.1.0/24", "example.com"]
+    hosts8 = {str(h) for h in target8.hosts}
+    assert hosts8 == {"192.168.1.0/24", "8.8.8.8/32", "example.com"}
     
     # Test that unrelated entries are not affected
     assert "192.168.1.100" in target8
@@ -545,6 +535,289 @@ def test_acl_mode():
     assert target8.get("8.8.8.8") == "8.8.8.8/32"
     
     print("✓ All ACL mode tests passed!")
+
+
+def test_target_hashing():
+    """
+    Test RadixTarget hashing functionality with the Rust-backed implementation.
+    
+    This test covers:
+    - Deterministic integer hash generation
+    - Hash consistency across identical targets
+    - Hash differences for different targets
+    - Hash changes when targets are modified
+    - Hash behavior with strict scope mode
+    - Hash properties (integer type)
+    """
+    
+    # Test basic target hashing
+    target1 = RadixTarget()
+    target1.add("evilcorp.com")
+    target1.add("1.2.3.4/24")
+    target1.add("evilcorp.net")
+    
+    # Get the hash and verify it's deterministic
+    hash1 = target1.hash
+    assert isinstance(hash1, int)
+    assert hash1 == -5575911061806357761  # Expected hash for this combination
+    
+    # Same target should produce same hash
+    assert target1.hash == hash1
+    
+    # Different target with additional entry
+    target2 = RadixTarget()
+    target2.add("evilcorp.org")
+    target2.add("evilcorp.com")
+    target2.add("1.2.3.4/24")
+    target2.add("evilcorp.net")
+    
+    hash2 = target2.hash
+    assert isinstance(hash2, int)
+    assert hash2 == 4519009570078867868  # Expected hash for this combination
+    
+    # Different targets should have different hashes initially
+    assert target1.hash != target2.hash
+    
+    # Target created from iteration should have same hash as original
+    target3 = RadixTarget()
+    for host in target1:
+        target3.add(str(host))
+    assert target3.hash == target1.hash
+    
+    # Test that strict scope affects hash
+    target4 = RadixTarget(strict_scope=True)
+    target4.add("evilcorp.com")
+    target4.add("1.2.3.0/24")  # Use canonical form
+    target4.add("evilcorp.net")
+    assert target4.hash == 6578698081272501171  # Expected hash for strict scope
+    assert target4.hash != target1.hash  # Should be different due to strict scope
+    
+    # Test hash equality after making targets equivalent
+    target1.add("evilcorp.org")  # Add missing host to target1
+    assert target1.hash == target2.hash  # Now they should match
+    assert target1.hash == 4519009570078867868
+    
+    # Test empty target hash
+    empty_target = RadixTarget()
+    empty_hash = empty_target.hash
+    assert isinstance(empty_hash, int)
+    assert empty_hash == -3953938083091587911  # Expected hash for empty target
+    
+    # Two empty targets should have same hash
+    empty_target2 = RadixTarget()
+    assert empty_target.hash == empty_target2.hash
+    
+    # Empty target should have different hash than populated target
+    assert empty_target.hash != target1.hash
+    
+    # Test hash with mixed IP/DNS content
+    mixed_target = RadixTarget()
+    mixed_target.add("192.168.1.0/24")
+    mixed_target.add("10.0.0.0/8")
+    mixed_target.add("example.com")
+    mixed_target.add("test.org")
+    mixed_target.add("2001:db8::/32")
+    
+    mixed_hash = mixed_target.hash
+    assert isinstance(mixed_hash, int)
+    assert mixed_hash == 922387328904585423  # Expected hash for mixed content
+    
+    # Same content in different order should produce same hash
+    mixed_target2 = RadixTarget()
+    mixed_target2.add("test.org")
+    mixed_target2.add("2001:db8::/32")
+    mixed_target2.add("example.com")
+    mixed_target2.add("10.0.0.0/8")
+    mixed_target2.add("192.168.1.0/24")
+    
+    assert mixed_target.hash == mixed_target2.hash
+    
+    print("✓ All target hashing tests passed!")
+
+
+def test_target_merging():
+    """
+    Test merging RadixTarget objects and adding lists of hosts.
+    
+    This test covers:
+    - Merging one target into another with target1.add(target2)
+    - Adding lists of hosts with target.add([host1, host2, ...])
+    - Data preservation during merging
+    - Proper string representation after merging
+    - Order independence of merging
+    """
+    
+    # Test basic target merging
+    target1 = RadixTarget()
+    target1.add("1.2.3.4/24")
+    target1.add("evilcorp.net")
+    
+    target2 = RadixTarget()
+    target2.add("evilcorp.com")
+    target2.add("evilcorp.net")  # Duplicate should not cause issues
+    
+    # Verify initial state
+    assert sorted([str(h) for h in target1]) == ["1.2.3.0/24", "evilcorp.net"]
+    assert sorted([str(h) for h in target2]) == ["evilcorp.com", "evilcorp.net"]
+    
+    # Merge target2 into target1
+    target1.add(target2)
+    
+    # Verify merged result
+    expected_hosts = ["1.2.3.0/24", "evilcorp.com", "evilcorp.net"]
+    assert sorted([str(h) for h in target1]) == expected_hosts
+    assert str(target1) == "1.2.3.0/24,evilcorp.com,evilcorp.net"
+    
+    # Test merging with custom data
+    target3 = RadixTarget()
+    target3.add("192.168.1.0/24", "network_data")
+    target3.add("test.com", "domain_data")
+    
+    target4 = RadixTarget()
+    target4.add("10.0.0.0/8", "big_network")
+    target4.add("api.test.com", "api_data")
+    
+    # Merge and verify data preservation
+    target3.add(target4)
+    
+    assert "192.168.1.100" in target3
+    assert target3.get("192.168.1.100") == "network_data"
+    assert "test.com" in target3
+    assert target3.get("test.com") == "domain_data"
+    assert "10.0.0.1" in target3
+    assert target3.get("10.0.0.1") == "big_network"
+    assert "api.test.com" in target3
+    assert target3.get("api.test.com") == "api_data"
+    
+    # Test adding list of hosts
+    target5 = RadixTarget()
+    host_list = ["8.8.8.8", "1.1.1.1", "example.org", "test.example.org"]
+    target5.add(host_list)
+    
+    # Verify all hosts were added
+    assert "8.8.8.8" in target5
+    assert "1.1.1.1" in target5
+    assert "example.org" in target5
+    assert "test.example.org" in target5
+    assert "www.example.org" in target5  # Should match example.org
+    
+    # Test order independence
+    target6 = RadixTarget()
+    target6.add("first.com")
+    target6.add("192.168.1.0/24")
+    
+    target7 = RadixTarget()
+    target7.add("second.com")
+    target7.add("10.0.0.0/8")
+    
+    target8 = RadixTarget()
+    target8.add("192.168.1.0/24")
+    target8.add("first.com")
+    
+    target9 = RadixTarget()
+    target9.add("10.0.0.0/8")
+    target9.add("second.com")
+    
+    # Merge in different orders
+    target6.add(target7)
+    target9.add(target8)
+    
+    # Should have same content regardless of merge order
+    hosts6 = sorted([str(h) for h in target6])
+    hosts9 = sorted([str(h) for h in target9])
+    assert hosts6 == hosts9
+    
+    print("✓ All target merging tests passed!")
+
+
+def test_target_copying():
+    """
+    Test copying RadixTarget objects.
+    
+    This test covers:
+    - Creating independent copies with .copy()
+    - Data preservation in copies
+    - Independence of copied targets
+    - Equality between original and copy
+    - Modifications don't affect the original
+    """
+    
+    # Create original target with mixed content
+    original = RadixTarget()
+    original.add("1.2.3.0/24", "network_data")
+    original.add("evilcorp.com", "domain_data")
+    original.add("8.8.8.8", "dns_server")
+    original.add("2001:db8::/32", "ipv6_data")
+    
+    # Create copy
+    copy_target = original.copy()
+    
+    # Verify copy is equal but not the same object
+    assert copy_target == original
+    assert copy_target is not original
+    
+    # Verify same hosts
+    original_hosts = sorted([str(h) for h in original])
+    copy_hosts = sorted([str(h) for h in copy_target])
+    assert original_hosts == copy_hosts
+    
+    expected_hosts = ["1.2.3.0/24", "2001:db8::/32", "8.8.8.8/32", "evilcorp.com"]
+    assert copy_hosts == expected_hosts
+    
+    # Verify data preservation
+    assert copy_target.get("1.2.3.100") == "network_data"
+    assert copy_target.get("evilcorp.com") == "domain_data"
+    assert copy_target.get("8.8.8.8") == "dns_server"
+    assert copy_target.get("2001:db8::1") == "ipv6_data"
+    
+    # Verify independence - modify original
+    original.add("new.domain.com", "new_data")
+    original.add("192.168.1.0/24", "new_network")
+    
+    # Copy should not have new entries
+    assert "new.domain.com" in original
+    assert "new.domain.com" not in copy_target
+    assert "192.168.1.100" in original
+    assert "192.168.1.100" not in copy_target
+    
+    # Original data should still be intact in copy
+    assert copy_target.get("1.2.3.100") == "network_data"
+    assert copy_target.get("evilcorp.com") == "domain_data"
+    
+    # Test copying empty target
+    empty_target = RadixTarget()
+    empty_copy = empty_target.copy()
+    
+    assert empty_copy == empty_target
+    assert empty_copy is not empty_target
+    assert len(empty_copy) == 0
+    assert not empty_copy
+    
+    # Test copying target with strict scope
+    strict_target = RadixTarget(strict_scope=True)
+    strict_target.add("example.com")
+    strict_target.add("192.168.1.0/24")
+    
+    strict_copy = strict_target.copy()
+    
+    # Should preserve strict scope behavior
+    assert "example.com" in strict_copy
+    assert "www.example.com" not in strict_copy  # Strict scope
+    assert "192.168.1.100" in strict_copy
+    
+    # Test copying target with ACL mode
+    acl_target = RadixTarget(acl_mode=True)
+    acl_target.add("1.2.3.0/24")
+    acl_target.add("1.2.3.0/28")  # Should be optimized away
+    
+    acl_copy = acl_target.copy()
+    
+    # Should preserve ACL optimization
+    hosts_acl = sorted([str(h) for h in acl_copy])
+    assert hosts_acl == ["1.2.3.0/24"]  # /28 should be optimized away
+    assert "1.2.3.100" in acl_copy
+    
+    print("✓ All target copying tests passed!")
 
 
 def test_error_handling():

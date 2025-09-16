@@ -8,6 +8,7 @@ pub mod target;
 pub mod utils;
 
 use target::RadixTarget;
+use dns::ScopeMode;
 use utils::host_size_key;
 
 #[pyclass]
@@ -18,20 +19,22 @@ struct PyRadixTarget {
 #[pymethods]
 impl PyRadixTarget {
     #[new]
-    #[pyo3(signature = (strict_scope = false, hosts = None))]
-    fn new(strict_scope: bool, hosts: Option<Bound<'_, PyList>>) -> PyResult<Self> {
-        let inner = if let Some(hosts_list) = hosts {
-            let hosts_vec: Result<Vec<String>, _> = hosts_list
-                .iter()
-                .map(|item| item.extract::<String>())
-                .collect();
-            let hosts_vec = hosts_vec?;
-            let hosts_str_vec: Vec<&str> = hosts_vec.iter().map(|s| s.as_str()).collect();
-            RadixTarget::new_with_hosts(strict_scope, &hosts_str_vec)
-        } else {
-            RadixTarget::new(strict_scope)
+    #[pyo3(signature = (hosts = None, strict_scope = false, acl_mode = false))]
+    fn new(hosts: Option<Bound<'_, PyList>>, strict_scope: bool, acl_mode: bool) -> PyResult<Self> {
+        let scope_mode = match (strict_scope, acl_mode) {
+            (false, false) => ScopeMode::Normal,
+            (true, false) => ScopeMode::Strict,
+            (false, true) => ScopeMode::Acl,
+            (true, true) => return Err(pyo3::exceptions::PyValueError::new_err(
+                "strict_scope and acl_mode are mutually exclusive"
+            )),
         };
-
+        let mut inner = RadixTarget::new(&[], scope_mode);
+        if let Some(hosts_list) = hosts {
+            for host in hosts_list.iter() {
+                inner.insert(&host.extract::<String>()?);
+            }
+        }
         Ok(PyRadixTarget { inner })
     }
 
@@ -117,6 +120,12 @@ impl PyRadixTarget {
             format!("{},…", hosts[..5].join(","))
         }
     }
+
+    fn copy(&self) -> PyRadixTarget {
+        PyRadixTarget {
+            inner: self.inner.copy(),
+        }
+    }
 }
 
 #[pyclass]
@@ -151,7 +160,7 @@ fn py_host_size_key(host: &Bound<'_, pyo3::PyAny>) -> PyResult<(i64, String)> {
 }
 
 #[pymodule]
-fn radixtarget_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _radixtarget(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRadixTarget>()?;
     m.add_function(wrap_pyfunction!(py_host_size_key, m)?)?;
     Ok(())

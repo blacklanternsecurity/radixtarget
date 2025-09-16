@@ -29,6 +29,9 @@ impl BaseNode for DnsNode {
     fn children_mut(&mut self) -> &mut HashMap<u64, Box<DnsNode>> {
         &mut self.children
     }
+    fn children(&self) -> &HashMap<u64, Box<DnsNode>> {
+        &self.children
+    }
     fn host_string(&self) -> Option<String> {
         self.host.clone()
     }

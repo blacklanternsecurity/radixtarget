@@ -123,6 +123,9 @@ impl BaseNode for IPNode {
     fn children_mut(&mut self) -> &mut HashMap<u64, Box<IPNode>> {
         &mut self.children
     }
+    fn children(&self) -> &HashMap<u64, Box<IPNode>> {
+        &self.children
+    }
     fn host_string(&self) -> Option<String> {
         self.network.as_ref().map(|n| n.to_string())
     }

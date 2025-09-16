@@ -2,23 +2,29 @@
 // Hostnames are stored in reverse order (TLD to subdomain) for hierarchical matching.
 // Inspired by the Python implementation in dns.py.
 use crate::node::{BaseNode, DnsNode, hash_u64};
+use std::collections::HashSet;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ScopeMode {
+    /// Normal mode - standard radix tree behavior
+    Normal,
+    /// Strict scope mode - more restrictive matching
+    Strict,
+    /// ACL mode - access control list behavior
+    Acl,
+}
 
 #[derive(Debug, Clone)]
 pub struct DnsRadixTree {
     pub root: DnsNode,
-    pub strict_scope: bool,
-    pub acl_mode: bool,
+    pub scope_mode: ScopeMode,
 }
 
 impl DnsRadixTree {
-    pub fn new(strict_scope: bool, acl_mode: bool) -> Self {
-        if strict_scope && acl_mode {
-            panic!("strict_scope and acl_mode are mutually exclusive");
-        }
+    pub fn new(scope_mode: ScopeMode) -> Self {
         DnsRadixTree {
             root: DnsNode::new(),
-            strict_scope,
-            acl_mode,
+            scope_mode,
         }
     }
 
@@ -26,7 +32,7 @@ impl DnsRadixTree {
     /// Returns the canonicalized hostname after insertion, or None if already exists in ACL mode.
     pub fn insert(&mut self, hostname: &str) -> Option<String> {
         // If ACL mode is enabled, check if the host is already covered by the tree
-        if self.acl_mode && self.get(hostname).is_some() {
+        if self.scope_mode == ScopeMode::Acl && self.get(hostname).is_some() {
             return None; // Skip insertion if already covered
         }
 
@@ -41,7 +47,7 @@ impl DnsRadixTree {
         node.host = Some(hostname.to_string());
 
         // If ACL mode is enabled, clear children of the inserted node
-        if self.acl_mode {
+        if self.scope_mode == ScopeMode::Acl {
             node.clear();
         }
 
@@ -58,7 +64,7 @@ impl DnsRadixTree {
         for (i, part) in parts.iter().rev().enumerate() {
             if let Some(child) = node.children.get(&hash_u64(part)) {
                 node = child;
-                if self.strict_scope && i + 1 < parts.len() {
+                if self.scope_mode == ScopeMode::Strict && i + 1 < parts.len() {
                     continue;
                 }
                 if let Some(host) = &node.host {
@@ -101,6 +107,11 @@ impl DnsRadixTree {
     pub fn prune(&mut self) -> usize {
         self.root.prune()
     }
+
+    /// Get all hostnames stored in the tree
+    pub fn hosts(&self) -> HashSet<String> {
+        self.root.all_hosts()
+    }
 }
 
 #[cfg(test)]
@@ -113,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_insert_and_get_basic() {
-        let mut tree = DnsRadixTree::new(false, false);
+        let mut tree = DnsRadixTree::new(ScopeMode::Normal);
         let canonical1 = tree.insert("example.com").unwrap();
         assert_eq!(
             canonical1,
@@ -145,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_strict_scope() {
-        let mut tree = DnsRadixTree::new(true, false);
+        let mut tree = DnsRadixTree::new(ScopeMode::Strict);
         let canonical1 = tree.insert("example.com").unwrap();
         assert_eq!(
             canonical1,
@@ -173,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_delete() {
-        let mut tree = DnsRadixTree::new(false, false);
+        let mut tree = DnsRadixTree::new(ScopeMode::Normal);
         let canonical1 = tree.insert("example.com").unwrap();
         assert_eq!(
             canonical1,
@@ -205,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_subdomain_matching() {
-        let mut tree = DnsRadixTree::new(false, false);
+        let mut tree = DnsRadixTree::new(ScopeMode::Normal);
         let canonical1 = tree.insert("evilcorp.com").unwrap();
         assert_eq!(
             canonical1,
@@ -263,7 +274,7 @@ mod tests {
 
     #[test]
     fn test_no_match() {
-        let mut tree = DnsRadixTree::new(false, false);
+        let mut tree = DnsRadixTree::new(ScopeMode::Normal);
         let canonical = tree.insert("example.com").unwrap();
         assert_eq!(
             canonical,
@@ -276,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_top_level_domain() {
-        let mut tree = DnsRadixTree::new(false, false);
+        let mut tree = DnsRadixTree::new(ScopeMode::Normal);
         // insert a top level domain
         let canonical = tree.insert("com").unwrap();
         assert_eq!(
@@ -297,7 +308,7 @@ mod tests {
     fn test_clear_method() {
         use crate::node::BaseNode;
 
-        let mut tree = DnsRadixTree::new(false, false);
+        let mut tree = DnsRadixTree::new(ScopeMode::Normal);
 
         // Insert hosts in random order
         let mut hosts = vec![
@@ -399,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_acl_mode_skip_existing() {
-        let mut tree = DnsRadixTree::new(false, true);
+        let mut tree = DnsRadixTree::new(ScopeMode::Acl);
 
         // First insertion should succeed
         let result1 = tree.insert("example.com");
@@ -420,7 +431,7 @@ mod tests {
 
     #[test]
     fn test_acl_mode_skip_children() {
-        let mut tree = DnsRadixTree::new(false, true);
+        let mut tree = DnsRadixTree::new(ScopeMode::Acl);
 
         // Insert parent domain first
         assert_eq!(tree.insert("example.com"), Some("example.com".to_string()));
@@ -435,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_acl_mode_clear_children() {
-        let mut tree = DnsRadixTree::new(false, true);
+        let mut tree = DnsRadixTree::new(ScopeMode::Acl);
 
         // Insert child domains first
         tree.insert("api.example.com");
