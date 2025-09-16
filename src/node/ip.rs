@@ -57,52 +57,52 @@ impl IPNode {
                 && (matches!(left_net, IpNet::V4(_)) && matches!(right_net, IpNet::V4(_))
                     || matches!(left_net, IpNet::V6(_)) && matches!(right_net, IpNet::V6(_)))
             {
-                    let prefix = left_net.prefix_len();
-                    let supernet = match (left_net, right_net) {
-                        (IpNet::V4(l), IpNet::V4(r)) => {
-                            if prefix > 0 && prefix <= 32 {
-                                let mask = if prefix == 32 {
-                                    0xffffffffu32
-                                } else {
-                                    !(0xffffffffu32 >> prefix)
-                                };
-                                let l_addr = u32::from(l.network());
-                                let r_addr = u32::from(r.network());
-                                if (l_addr ^ r_addr) == (1 << (32 - prefix)) {
-                                    let min_addr = l_addr.min(r_addr) & mask;
-                                    Some(IpNet::V4(
-                                        Ipv4Net::new(min_addr.into(), prefix - 1).unwrap(),
-                                    ))
-                                } else {
-                                    None
-                                }
+                let prefix = left_net.prefix_len();
+                let supernet = match (left_net, right_net) {
+                    (IpNet::V4(l), IpNet::V4(r)) => {
+                        if prefix > 0 && prefix <= 32 {
+                            let mask = if prefix == 32 {
+                                0xffffffffu32
+                            } else {
+                                !(0xffffffffu32 >> prefix)
+                            };
+                            let l_addr = u32::from(l.network());
+                            let r_addr = u32::from(r.network());
+                            if (l_addr ^ r_addr) == (1 << (32 - prefix)) {
+                                let min_addr = l_addr.min(r_addr) & mask;
+                                Some(IpNet::V4(
+                                    Ipv4Net::new(min_addr.into(), prefix - 1).unwrap(),
+                                ))
                             } else {
                                 None
                             }
+                        } else {
+                            None
                         }
-                        (IpNet::V6(l), IpNet::V6(r)) => {
-                            if prefix > 0 && prefix <= 128 {
-                                let mask = if prefix == 128 {
-                                    0xffffffffffffffffffffffffffffffffu128
-                                } else {
-                                    !(0xffffffffffffffffffffffffffffffffu128 >> prefix)
-                                };
-                                let l_addr = u128::from(l.network());
-                                let r_addr = u128::from(r.network());
-                                if (l_addr ^ r_addr) == (1 << (128 - prefix)) {
-                                    let min_addr = l_addr.min(r_addr) & mask;
-                                    Some(IpNet::V6(
-                                        Ipv6Net::new(min_addr.into(), prefix - 1).unwrap(),
-                                    ))
-                                } else {
-                                    None
-                                }
+                    }
+                    (IpNet::V6(l), IpNet::V6(r)) => {
+                        if prefix > 0 && prefix <= 128 {
+                            let mask = if prefix == 128 {
+                                0xffffffffffffffffffffffffffffffffu128
+                            } else {
+                                !(0xffffffffffffffffffffffffffffffffu128 >> prefix)
+                            };
+                            let l_addr = u128::from(l.network());
+                            let r_addr = u128::from(r.network());
+                            if (l_addr ^ r_addr) == (1 << (128 - prefix)) {
+                                let min_addr = l_addr.min(r_addr) & mask;
+                                Some(IpNet::V6(
+                                    Ipv6Net::new(min_addr.into(), prefix - 1).unwrap(),
+                                ))
                             } else {
                                 None
                             }
+                        } else {
+                            None
                         }
-                        _ => None,
-                    };
+                    }
+                    _ => None,
+                };
                 if let Some(supernet) = supernet {
                     pairs.push((*left_net, *right_net, supernet));
                 }

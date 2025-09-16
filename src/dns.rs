@@ -26,10 +26,9 @@ impl DnsRadixTree {
     /// Returns the canonicalized hostname after insertion, or None if already exists in ACL mode.
     pub fn insert(&mut self, hostname: &str) -> Option<String> {
         // If ACL mode is enabled, check if the host is already covered by the tree
-        if self.acl_mode
-            && self.get(hostname).is_some() {
-                return None; // Skip insertion if already covered
-            }
+        if self.acl_mode && self.get(hostname).is_some() {
+            return None; // Skip insertion if already covered
+        }
 
         let parts: Vec<&str> = hostname.split('.').collect();
         let mut node = &mut self.root;

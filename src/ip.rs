@@ -20,10 +20,9 @@ impl IpRadixTree {
         let canonical = canonicalize_ipnet(&network);
 
         // If ACL mode is enabled, check if the network is already covered by the tree
-        if self.acl_mode
-            && self.get(&canonical).is_some() {
-                return None; // Skip insertion if already covered
-            }
+        if self.acl_mode && self.get(&canonical).is_some() {
+            return None; // Skip insertion if already covered
+        }
 
         let mut node = &mut self.root;
         let bits = ipnet_to_bits(&canonical);
@@ -48,17 +47,20 @@ impl IpRadixTree {
         let bits = ipnet_to_bits(&canonical);
         let mut best: Option<&IpNet> = None;
         if let Some(n) = &node.network
-            && n.contains(&canonical.network()) && n.prefix_len() <= canonical.prefix_len() {
-                best = Some(n);
-            }
+            && n.contains(&canonical.network())
+            && n.prefix_len() <= canonical.prefix_len()
+        {
+            best = Some(n);
+        }
         for &bit in &bits {
             if let Some(child) = node.children.get(&u64::from(bit)) {
                 node = child;
                 if let Some(n) = &node.network
-                    && n.contains(&canonical.network()) && n.prefix_len() <= canonical.prefix_len()
-                    {
-                        best = Some(n);
-                    }
+                    && n.contains(&canonical.network())
+                    && n.prefix_len() <= canonical.prefix_len()
+                {
+                    best = Some(n);
+                }
             } else {
                 break;
             }
