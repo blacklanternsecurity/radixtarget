@@ -1,10 +1,16 @@
-use std::collections::HashMap;
 use super::base::BaseNode;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct DnsNode {
     pub children: HashMap<u64, Box<DnsNode>>,
     pub host: Option<String>, // canonicalized (punycode) hostname
+}
+
+impl Default for DnsNode {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DnsNode {

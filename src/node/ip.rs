@@ -1,11 +1,17 @@
-use std::collections::HashMap;
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use super::base::BaseNode;
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct IPNode {
     pub children: HashMap<u64, Box<IPNode>>,
     pub network: Option<IpNet>,
+}
+
+impl Default for IPNode {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl IPNode {
@@ -46,10 +52,11 @@ impl IPNode {
             let mut iter = self.children.values();
             let left = iter.next().unwrap();
             let right = iter.next().unwrap();
-            if let (Some(left_net), Some(right_net)) = (&left.network, &right.network) {
-                if left_net.prefix_len() == right_net.prefix_len() &&
-                   (matches!(left_net, IpNet::V4(_)) && matches!(right_net, IpNet::V4(_)) ||
-                    matches!(left_net, IpNet::V6(_)) && matches!(right_net, IpNet::V6(_))) {
+            if let (Some(left_net), Some(right_net)) = (&left.network, &right.network)
+                && left_net.prefix_len() == right_net.prefix_len()
+                && (matches!(left_net, IpNet::V4(_)) && matches!(right_net, IpNet::V4(_))
+                    || matches!(left_net, IpNet::V6(_)) && matches!(right_net, IpNet::V6(_)))
+            {
                     let prefix = left_net.prefix_len();
                     let supernet = match (left_net, right_net) {
                         (IpNet::V4(l), IpNet::V4(r)) => {
@@ -63,7 +70,9 @@ impl IPNode {
                                 let r_addr = u32::from(r.network());
                                 if (l_addr ^ r_addr) == (1 << (32 - prefix)) {
                                     let min_addr = l_addr.min(r_addr) & mask;
-                                    Some(IpNet::V4(Ipv4Net::new(min_addr.into(), prefix - 1).unwrap()))
+                                    Some(IpNet::V4(
+                                        Ipv4Net::new(min_addr.into(), prefix - 1).unwrap(),
+                                    ))
                                 } else {
                                     None
                                 }
@@ -82,7 +91,9 @@ impl IPNode {
                                 let r_addr = u128::from(r.network());
                                 if (l_addr ^ r_addr) == (1 << (128 - prefix)) {
                                     let min_addr = l_addr.min(r_addr) & mask;
-                                    Some(IpNet::V6(Ipv6Net::new(min_addr.into(), prefix - 1).unwrap()))
+                                    Some(IpNet::V6(
+                                        Ipv6Net::new(min_addr.into(), prefix - 1).unwrap(),
+                                    ))
                                 } else {
                                     None
                                 }
@@ -92,9 +103,8 @@ impl IPNode {
                         }
                         _ => None,
                     };
-                    if let Some(supernet) = supernet {
-                        pairs.push((left_net.clone(), right_net.clone(), supernet));
-                    }
+                if let Some(supernet) = supernet {
+                    pairs.push((*left_net, *right_net, supernet));
                 }
             }
         }

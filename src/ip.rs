@@ -1,8 +1,7 @@
-use std::collections::HashSet;
-use ipnet::IpNet;
-use crate::node::{IPNode, BaseNode};
+use crate::node::{BaseNode, IPNode};
 use crate::utils::{canonicalize_ipnet, ipnet_to_bits};
-
+use ipnet::IpNet;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct IpRadixTree {
@@ -19,20 +18,22 @@ impl IpRadixTree {
     }
     pub fn insert(&mut self, network: IpNet) -> Option<String> {
         let canonical = canonicalize_ipnet(&network);
-        
+
         // If ACL mode is enabled, check if the network is already covered by the tree
-        if self.acl_mode {
-            if self.get(&canonical).is_some() {
+        if self.acl_mode
+            && self.get(&canonical).is_some() {
                 return None; // Skip insertion if already covered
             }
-        }
 
         let mut node = &mut self.root;
         let bits = ipnet_to_bits(&canonical);
         for &bit in &bits {
-            node = node.children.entry(u64::from(bit)).or_insert_with(|| Box::new(IPNode::new()));
+            node = node
+                .children
+                .entry(u64::from(bit))
+                .or_insert_with(|| Box::new(IPNode::new()));
         }
-        node.network = Some(canonical.clone());
+        node.network = Some(canonical);
 
         // If ACL mode is enabled, clear children of the inserted node
         if self.acl_mode {
@@ -46,19 +47,18 @@ impl IpRadixTree {
         let mut node = &self.root;
         let bits = ipnet_to_bits(&canonical);
         let mut best: Option<&IpNet> = None;
-        if let Some(n) = &node.network {
-            if n.contains(&canonical.network()) && n.prefix_len() <= canonical.prefix_len() {
+        if let Some(n) = &node.network
+            && n.contains(&canonical.network()) && n.prefix_len() <= canonical.prefix_len() {
                 best = Some(n);
             }
-        }
         for &bit in &bits {
             if let Some(child) = node.children.get(&u64::from(bit)) {
                 node = child;
-                if let Some(n) = &node.network {
-                    if n.contains(&canonical.network()) && n.prefix_len() <= canonical.prefix_len() {
+                if let Some(n) = &node.network
+                    && n.contains(&canonical.network()) && n.prefix_len() <= canonical.prefix_len()
+                    {
                         best = Some(n);
                     }
-                }
             } else {
                 break;
             }
@@ -103,9 +103,9 @@ impl IpRadixTree {
                 cleaned.insert(left_net.to_string());
                 cleaned.insert(right_net.to_string());
                 new.insert(supernet.to_string());
-                self.delete(left_net.clone());
-                self.delete(right_net.clone());
-                self.insert(supernet.clone());
+                self.delete(left_net);
+                self.delete(right_net);
+                self.insert(supernet);
             }
         }
         // Remove any overlap between cleaned and new
@@ -118,13 +118,12 @@ impl IpRadixTree {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::{canonicalize_ipnet, ipnet_to_bits};
     use ipnet::IpNet;
     use std::str::FromStr;
-    use crate::utils::{canonicalize_ipnet, ipnet_to_bits};
 
     /// Test basic insertion and lookup for both IPv4 and IPv6 networks.
     /// Ensures that inserted networks are found, and unrelated addresses are not.
@@ -137,8 +136,14 @@ mod tests {
         assert_eq!(hash_v4, Some(net_v4.to_string()), "insert(8.8.8.0/24) hash");
         let hash_v6 = tree.insert(net_v6);
         assert_eq!(hash_v6, Some(net_v6.to_string()), "insert(dead::/64) hash");
-        assert_eq!(tree.get(&IpNet::from_str("8.8.8.8/32").unwrap()), Some(net_v4.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("dead::beef/128").unwrap()), Some(net_v6.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("8.8.8.8/32").unwrap()),
+            Some(net_v4.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead::beef/128").unwrap()),
+            Some(net_v6.to_string())
+        );
         assert_eq!(tree.get(&IpNet::from_str("1.1.1.1/32").unwrap()), None);
         assert_eq!(tree.get(&IpNet::from_str("cafe::beef/128").unwrap()), None);
     }
@@ -152,7 +157,10 @@ mod tests {
         let net = IpNet::from_str("192.168.1.0/24").unwrap();
         let hash = tree.insert(net);
         assert_eq!(hash, Some(net.to_string()), "insert(192.168.1.0/24) hash");
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.1/32").unwrap()), Some(net.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.1/32").unwrap()),
+            Some(net.to_string())
+        );
         assert_eq!(tree.get(&IpNet::from_str("192.168.2.1/32").unwrap()), None);
     }
 
@@ -164,7 +172,10 @@ mod tests {
         let net = IpNet::from_str("10.0.0.1/32").unwrap();
         let hash = tree.insert(net);
         assert_eq!(hash, Some(net.to_string()), "insert(10.0.0.1/32) hash");
-        assert_eq!(tree.get(&IpNet::from_str("10.0.0.1/32").unwrap()), Some(net.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.0.0.1/32").unwrap()),
+            Some(net.to_string())
+        );
         assert_eq!(tree.get(&IpNet::from_str("10.0.0.2/32").unwrap()), None);
     }
 
@@ -182,12 +193,30 @@ mod tests {
         assert_eq!(hash2, Some(net2.to_string()), "insert(10.1.0.0/16) hash");
         let hash1 = tree.insert(net1);
         assert_eq!(hash1, Some(net1.to_string()), "insert(10.0.0.0/8) hash");
-        assert_eq!(tree.get(&IpNet::from_str("10.1.2.3/32").unwrap()), Some(net3.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.1.2.3/30").unwrap()), Some(net3.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.1.3.3/32").unwrap()), Some(net2.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.1.3.3/30").unwrap()), Some(net2.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.2.2.2/32").unwrap()), Some(net1.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.2.2.2/30").unwrap()), Some(net1.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.2.3/32").unwrap()),
+            Some(net3.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.2.3/30").unwrap()),
+            Some(net3.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.3.3/32").unwrap()),
+            Some(net2.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.3.3/30").unwrap()),
+            Some(net2.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.2.2.2/32").unwrap()),
+            Some(net1.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.2.2.2/30").unwrap()),
+            Some(net1.to_string())
+        );
     }
 
     /// Test IPv6 longest-prefix match logic.
@@ -202,32 +231,71 @@ mod tests {
         let net4 = IpNet::from_str("2001:db8:abcd:1234:5678::/80").unwrap();
         // Insert out of order and with host bits
         let hash4 = tree.insert(IpNet::from_str("2001:db8:abcd:1234:5678:9abc::1/80").unwrap()); // net4
-        assert_eq!(hash4, Some(net4.to_string()), "insert(2001:db8:abcd:1234:5678::/80) hash");
+        assert_eq!(
+            hash4,
+            Some(net4.to_string()),
+            "insert(2001:db8:abcd:1234:5678::/80) hash"
+        );
         let hash3 = tree.insert(IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()); // net3
-        assert_eq!(hash3, Some(net3.to_string()), "insert(2001:db8:abcd:1234::/64) hash");
+        assert_eq!(
+            hash3,
+            Some(net3.to_string()),
+            "insert(2001:db8:abcd:1234::/64) hash"
+        );
         let hash2 = tree.insert(IpNet::from_str("2001:db8:abcd::/48").unwrap()); // net2
-        assert_eq!(hash2, Some(net2.to_string()), "insert(2001:db8:abcd::/48) hash");
+        assert_eq!(
+            hash2,
+            Some(net2.to_string()),
+            "insert(2001:db8:abcd::/48) hash"
+        );
         let hash1 = tree.insert(IpNet::from_str("2001:db8::1/32").unwrap()); // net1
         assert_eq!(hash1, Some(net1.to_string()), "insert(2001:db8::/32) hash");
 
         // Queries for most specific match
         // Should match net4
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234:5678:9abc::dead/128").unwrap()), Some(net4.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234:5678:9abc::dead/128").unwrap()),
+            Some(net4.to_string())
+        );
         // Should match net3
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234::beef/128").unwrap()), Some(net3.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234::beef/128").unwrap()),
+            Some(net3.to_string())
+        );
         // Should match net2
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd::cafe/128").unwrap()), Some(net2.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd::cafe/128").unwrap()),
+            Some(net2.to_string())
+        );
         // Should match net1
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8::1234/128").unwrap()), Some(net1.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8::1234/128").unwrap()),
+            Some(net1.to_string())
+        );
 
         // Queries with host bits and different prefix lengths
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234:5678:9abc::dead/81").unwrap()), Some(net4.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234::beef/65").unwrap()), Some(net3.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd::cafe/49").unwrap()), Some(net2.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8::1234/33").unwrap()), Some(net1.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234:5678:9abc::dead/81").unwrap()),
+            Some(net4.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234::beef/65").unwrap()),
+            Some(net3.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd::cafe/49").unwrap()),
+            Some(net2.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8::1234/33").unwrap()),
+            Some(net1.to_string())
+        );
 
         // Query outside all networks
-        assert_eq!(tree.get(&IpNet::from_str("2001:dead::1/128").unwrap()), None);
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:dead::1/128").unwrap()),
+            None
+        );
         assert_eq!(tree.get(&IpNet::from_str("3000::/32").unwrap()), None);
     }
 
@@ -245,48 +313,103 @@ mod tests {
         let hash2 = tree.insert(net2);
         assert_eq!(hash2, Some(net2.to_string()), "insert(192.168.1.0/24) hash");
         let hash3 = tree.insert(net3);
-        assert_eq!(hash3, Some(net3.to_string()), "insert(192.168.1.128/25) hash");
+        assert_eq!(
+            hash3,
+            Some(net3.to_string()),
+            "insert(192.168.1.128/25) hash"
+        );
         // Query before deletion
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.128/25").unwrap()), Some(net3.to_string())); // Most specific: /25
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()), Some(net3.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.0/24").unwrap()), Some(net2.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.128/25").unwrap()),
+            Some(net3.to_string())
+        ); // Most specific: /25
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()),
+            Some(net3.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.0/24").unwrap()),
+            Some(net2.to_string())
+        );
         // Delete the most specific network
         assert!(tree.delete(IpNet::from_str("192.168.1.128/25").unwrap()));
         // Now queries in 192.168.1.128/25 should fall back to /24
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.128/25").unwrap()), Some(net2.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()), Some(net2.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.128/25").unwrap()),
+            Some(net2.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()),
+            Some(net2.to_string())
+        );
         // Delete the /24
         assert!(tree.delete(IpNet::from_str("192.168.1.0/24").unwrap()));
         // Now queries in 192.168.1.0/24 should fall back to /16
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()), Some(net1.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()),
+            Some(net1.to_string())
+        );
         // Delete the /16
         assert!(tree.delete(IpNet::from_str("192.168.0.0/16").unwrap()));
         // Now nothing should match
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()), None);
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.129/32").unwrap()),
+            None
+        );
 
         // IPv6 case
         let netv6_1 = IpNet::from_str("2001:db8::/32").unwrap();
         let netv6_2 = IpNet::from_str("2001:db8:abcd::/48").unwrap();
         let netv6_3 = IpNet::from_str("2001:db8:abcd:1234::/64").unwrap();
         let hashv6_1 = tree.insert(netv6_1);
-        assert_eq!(hashv6_1, Some(netv6_1.to_string()), "insert(2001:db8::/32) hash");
+        assert_eq!(
+            hashv6_1,
+            Some(netv6_1.to_string()),
+            "insert(2001:db8::/32) hash"
+        );
         let hashv6_2 = tree.insert(netv6_2);
-        assert_eq!(hashv6_2, Some(netv6_2.to_string()), "insert(2001:db8:abcd::/48) hash");
+        assert_eq!(
+            hashv6_2,
+            Some(netv6_2.to_string()),
+            "insert(2001:db8:abcd::/48) hash"
+        );
         let hashv6_3 = tree.insert(netv6_3);
-        assert_eq!(hashv6_3, Some(netv6_3.to_string()), "insert(2001:db8:abcd:1234::/64) hash");
+        assert_eq!(
+            hashv6_3,
+            Some(netv6_3.to_string()),
+            "insert(2001:db8:abcd:1234::/64) hash"
+        );
         // Query before deletion
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()), Some(netv6_3.to_string())); // Most specific: /64
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd::/48").unwrap()), Some(netv6_2.to_string()));     // Most specific: /48
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8::/32").unwrap()), Some(netv6_1.to_string()));          // Most specific: /32
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()),
+            Some(netv6_3.to_string())
+        ); // Most specific: /64
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd::/48").unwrap()),
+            Some(netv6_2.to_string())
+        ); // Most specific: /48
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8::/32").unwrap()),
+            Some(netv6_1.to_string())
+        ); // Most specific: /32
         // Delete the most specific
         assert!(tree.delete(IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()));
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()), Some(netv6_2.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()),
+            Some(netv6_2.to_string())
+        );
         // Delete the /48
         assert!(tree.delete(IpNet::from_str("2001:db8:abcd::/48").unwrap()));
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()), Some(netv6_1.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()),
+            Some(netv6_1.to_string())
+        );
         // Delete the /32
         assert!(tree.delete(IpNet::from_str("2001:db8::/32").unwrap()));
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()), None);
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234::/64").unwrap()),
+            None
+        );
     }
 
     /// Test insertion and lookup with custom data types as values.
@@ -297,7 +420,10 @@ mod tests {
         let net = IpNet::from_str("8.8.8.0/24").unwrap();
         let hash = tree.insert(net);
         assert_eq!(hash, Some(net.to_string()), "insert(8.8.8.0/24) hash");
-        assert_eq!(tree.get(&IpNet::from_str("8.8.8.8/32").unwrap()), Some(net.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("8.8.8.8/32").unwrap()),
+            Some(net.to_string())
+        );
     }
 
     /// Test insertion and lookup of a zero-prefix (default) IPv4 network.
@@ -308,8 +434,14 @@ mod tests {
         let net = IpNet::from_str("0.0.0.0/0").unwrap();
         let hash = tree.insert(net);
         assert_eq!(hash, Some(net.to_string()), "insert(0.0.0.0/0) hash");
-        assert_eq!(tree.get(&IpNet::from_str("1.2.3.4/32").unwrap()), Some(net.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("255.255.255.255/32").unwrap()), Some(net.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("1.2.3.4/32").unwrap()),
+            Some(net.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("255.255.255.255/32").unwrap()),
+            Some(net.to_string())
+        );
     }
 
     /// Test insertion and lookup of a zero-prefix (default) IPv6 network.
@@ -320,8 +452,14 @@ mod tests {
         let net = IpNet::from_str("::/0").unwrap();
         let hash = tree.insert(net);
         assert_eq!(hash, Some(net.to_string()), "insert(::/0) hash");
-        assert_eq!(tree.get(&IpNet::from_str("::1/128").unwrap()), Some(net.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128").unwrap()), Some(net.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("::1/128").unwrap()),
+            Some(net.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128").unwrap()),
+            Some(net.to_string())
+        );
     }
 
     /// Test insertion and lookup of both IPv4 and IPv6 single-address networks in the same tree.
@@ -335,8 +473,14 @@ mod tests {
         assert_eq!(hash4, Some(net4.to_string()), "insert(1.2.3.4/32) hash");
         let hash6 = tree.insert(net6);
         assert_eq!(hash6, Some(net6.to_string()), "insert(dead::beef/128) hash");
-        assert_eq!(tree.get(&IpNet::from_str("1.2.3.4/32").unwrap()), Some(net4.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("dead::beef/128").unwrap()), Some(net6.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("1.2.3.4/32").unwrap()),
+            Some(net4.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead::beef/128").unwrap()),
+            Some(net6.to_string())
+        );
     }
 
     /// Test insertion of an IPv6 network with host bits set.
@@ -348,20 +492,45 @@ mod tests {
         let inserted = IpNet::from_str("dead:beef::1/120").unwrap();
         let normalized = IpNet::from_str("dead:beef::0/120").unwrap();
         let hash = tree.insert(inserted);
-        assert_eq!(hash, Some(normalized.to_string()), "insert(dead:beef::0/120) hash");
+        assert_eq!(
+            hash,
+            Some(normalized.to_string()),
+            "insert(dead:beef::0/120) hash"
+        );
         // Query with addresses within the /120
-        assert_eq!(tree.get(&IpNet::from_str("dead:beef::2/128").unwrap()), Some(normalized.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("dead:beef::ff/128").unwrap()), Some(normalized.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead:beef::2/128").unwrap()),
+            Some(normalized.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead:beef::ff/128").unwrap()),
+            Some(normalized.to_string())
+        );
         // Query with a network within the /120 (should normalize query)
-        assert_eq!(tree.get(&IpNet::from_str("dead:beef::2/121").unwrap()), Some(normalized.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead:beef::2/121").unwrap()),
+            Some(normalized.to_string())
+        );
         // Query with an address outside the /120
-        assert_eq!(tree.get(&IpNet::from_str("dead:beef::100/128").unwrap()), None);
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead:beef::100/128").unwrap()),
+            None
+        );
         // Delete with host bits set (should normalize and delete the /120)
         assert!(tree.delete(IpNet::from_str("dead:beef::ff/120").unwrap()));
         // After deletion, nothing in the /120 should match
-        assert_eq!(tree.get(&IpNet::from_str("dead:beef::2/128").unwrap()), None);
-        assert_eq!(tree.get(&IpNet::from_str("dead:beef::ff/128").unwrap()), None);
-        assert_eq!(tree.get(&IpNet::from_str("dead:beef::2/121").unwrap()), None);
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead:beef::2/128").unwrap()),
+            None
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead:beef::ff/128").unwrap()),
+            None
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead:beef::2/121").unwrap()),
+            None
+        );
     }
 
     /// Test querying by network string for both IPv4 and IPv6.
@@ -376,8 +545,14 @@ mod tests {
         let hash_v6 = tree.insert(net_v6);
         assert_eq!(hash_v6, Some(net_v6.to_string()), "insert(dead::/64) hash");
         // Query by network string
-        assert_eq!(tree.get(&IpNet::from_str("8.8.8.0/24").unwrap()), Some(net_v4.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("dead::/64").unwrap()), Some(net_v6.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("8.8.8.0/24").unwrap()),
+            Some(net_v4.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("dead::/64").unwrap()),
+            Some(net_v6.to_string())
+        );
         // Query by non-existent network
         assert_eq!(tree.get(&IpNet::from_str("8.8.9.0/24").unwrap()), None);
         assert_eq!(tree.get(&IpNet::from_str("cafe::/64").unwrap()), None);
@@ -397,13 +572,31 @@ mod tests {
         let hash3 = tree.insert(net3);
         assert_eq!(hash3, Some(net3.to_string()), "insert(10.1.2.0/24) hash");
         // Query by network string
-        assert_eq!(tree.get(&IpNet::from_str("10.1.2.0/24").unwrap()), Some(net3.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.1.0.0/16").unwrap()), Some(net2.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.0.0.0/8").unwrap()), Some(net1.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.2.0/24").unwrap()),
+            Some(net3.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.0.0/16").unwrap()),
+            Some(net2.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.0.0.0/8").unwrap()),
+            Some(net1.to_string())
+        );
         // Query by less specific network (should match the most specific containing network)
-        assert_eq!(tree.get(&IpNet::from_str("10.1.2.0/26").unwrap()), Some(net3.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.1.0.0/22").unwrap()), Some(net2.to_string()));
-        assert_eq!(tree.get(&IpNet::from_str("10.1.0.0/12").unwrap()), Some(net1.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.2.0/26").unwrap()),
+            Some(net3.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.0.0/22").unwrap()),
+            Some(net2.to_string())
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("10.1.0.0/12").unwrap()),
+            Some(net1.to_string())
+        );
         // Query by a network not contained by any inserted network
         assert_eq!(tree.get(&IpNet::from_str("10.0.0.0/7").unwrap()), None);
         assert_eq!(tree.get(&IpNet::from_str("11.0.0.0/8").unwrap()), None);
@@ -423,11 +616,24 @@ mod tests {
         let hash2 = tree.insert(net2);
         assert_eq!(hash2, Some(net2.to_string()), "insert(192.168.1.0/24) hash");
         let hash3 = tree.insert(net3);
-        assert_eq!(hash3, Some(net3.to_string()), "insert(192.168.1.128/25) hash");
+        assert_eq!(
+            hash3,
+            Some(net3.to_string()),
+            "insert(192.168.1.128/25) hash"
+        );
         // Query by a child network that is a subnet of both /16 and /24, but not an exact match
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.128/26").unwrap()), Some(net3.to_string())); // Most specific: /25
-        assert_eq!(tree.get(&IpNet::from_str("192.168.1.0/25").unwrap()), Some(net2.to_string()));   // Most specific: /24
-        assert_eq!(tree.get(&IpNet::from_str("192.168.2.0/24").unwrap()), Some(net1.to_string()));   // Only /16 matches
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.128/26").unwrap()),
+            Some(net3.to_string())
+        ); // Most specific: /25
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.1.0/25").unwrap()),
+            Some(net2.to_string())
+        ); // Most specific: /24
+        assert_eq!(
+            tree.get(&IpNet::from_str("192.168.2.0/24").unwrap()),
+            Some(net1.to_string())
+        ); // Only /16 matches
         // Query by a network that doesn't match any
         assert_eq!(tree.get(&IpNet::from_str("10.0.0.0/8").unwrap()), None);
 
@@ -436,15 +642,36 @@ mod tests {
         let netv6_2 = IpNet::from_str("2001:db8:abcd::/48").unwrap();
         let netv6_3 = IpNet::from_str("2001:db8:abcd:1234::/64").unwrap();
         let hashv6_1 = tree.insert(netv6_1);
-        assert_eq!(hashv6_1, Some(netv6_1.to_string()), "insert(2001:db8::/32) hash");
+        assert_eq!(
+            hashv6_1,
+            Some(netv6_1.to_string()),
+            "insert(2001:db8::/32) hash"
+        );
         let hashv6_2 = tree.insert(netv6_2);
-        assert_eq!(hashv6_2, Some(netv6_2.to_string()), "insert(2001:db8:abcd::/48) hash");
+        assert_eq!(
+            hashv6_2,
+            Some(netv6_2.to_string()),
+            "insert(2001:db8:abcd::/48) hash"
+        );
         let hashv6_3 = tree.insert(netv6_3);
-        assert_eq!(hashv6_3, Some(netv6_3.to_string()), "insert(2001:db8:abcd:1234::/64) hash");
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd:1234::/80").unwrap()), Some(netv6_3.to_string())); // Most specific: /64
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8:abcd::/56").unwrap()), Some(netv6_2.to_string()));     // Most specific: /48
-        assert_eq!(tree.get(&IpNet::from_str("2001:db8::/40").unwrap()), Some(netv6_1.to_string()));          // Most specific: /32
-        assert_eq!(tree.get(&IpNet::from_str("2001:dead::/32").unwrap()), None);              // No match
+        assert_eq!(
+            hashv6_3,
+            Some(netv6_3.to_string()),
+            "insert(2001:db8:abcd:1234::/64) hash"
+        );
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd:1234::/80").unwrap()),
+            Some(netv6_3.to_string())
+        ); // Most specific: /64
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8:abcd::/56").unwrap()),
+            Some(netv6_2.to_string())
+        ); // Most specific: /48
+        assert_eq!(
+            tree.get(&IpNet::from_str("2001:db8::/40").unwrap()),
+            Some(netv6_1.to_string())
+        ); // Most specific: /32
+        assert_eq!(tree.get(&IpNet::from_str("2001:dead::/32").unwrap()), None); // No match
     }
 
     /// Test that IPv4 and IPv6 addresses with the same bits are treated as overlapping in a single IpNet-based tree.
@@ -456,21 +683,41 @@ mod tests {
         let net4 = IpNet::from_str("1.0.0.0/30").unwrap();
         let net6 = IpNet::from_str("100::/30").unwrap();
         // Assert that the bit vectors for both networks are identical for the first 30 bits
-        let expected_bits = vec![0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0];
-        assert_eq!(ipnet_to_bits(&net4), expected_bits, "net4 bits did not match expected");
-        assert_eq!(ipnet_to_bits(&net6), expected_bits, "net6 bits did not match expected");
+        let expected_bits = vec![
+            0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0,
+        ];
+        assert_eq!(
+            ipnet_to_bits(&net4),
+            expected_bits,
+            "net4 bits did not match expected"
+        );
+        assert_eq!(
+            ipnet_to_bits(&net6),
+            expected_bits,
+            "net6 bits did not match expected"
+        );
 
         let hash4 = tree.insert(net4);
         assert_eq!(hash4, Some(net4.to_string()), "insert(1.0.0.0/30) hash");
-        assert_eq!(tree.get(&IpNet::from_str("1.0.0.1/30").unwrap()), Some(net4.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("1.0.0.1/30").unwrap()),
+            Some(net4.to_string())
+        );
 
         let hash6 = tree.insert(net6);
         assert_eq!(hash6, Some(net6.to_string()), "insert(100::/30) hash");
-        assert_eq!(tree.get(&IpNet::from_str("100::1/30").unwrap()), Some(net6.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("100::1/30").unwrap()),
+            Some(net6.to_string())
+        );
 
         // Oops, we clobbered our IPv4 network. This is expected, and the reason why we maintain 2 separate trees.
         assert_eq!(tree.get(&IpNet::from_str("1.0.0.1/30").unwrap()), None);
-        assert_eq!(tree.get(&IpNet::from_str("100::1/30").unwrap()), Some(net6.to_string()));
+        assert_eq!(
+            tree.get(&IpNet::from_str("100::1/30").unwrap()),
+            Some(net6.to_string())
+        );
     }
 
     #[test]
@@ -480,9 +727,9 @@ mod tests {
         let supernet = IpNet::from_str("192.168.0.0/23").unwrap();
         let mut parent = IPNode::new();
         let mut child1 = Box::new(IPNode::new());
-        child1.network = Some(net1.clone());
+        child1.network = Some(net1);
         let mut child2 = Box::new(IPNode::new());
-        child2.network = Some(net2.clone());
+        child2.network = Some(net2);
         parent.children.insert(0, child1);
         parent.children.insert(1, child2);
 
@@ -503,8 +750,8 @@ mod tests {
         let net1 = IpNet::from_str("192.168.0.0/24").unwrap();
         let net2 = IpNet::from_str("192.168.1.0/24").unwrap();
         let supernet = IpNet::from_str("192.168.0.0/23").unwrap();
-        tree.insert(net1.clone());
-        tree.insert(net2.clone());
+        tree.insert(net1);
+        tree.insert(net2);
         // Before defrag, lookups should return the /24s
         let ip1 = IpNet::from_str("192.168.0.1/32").unwrap();
         let ip2 = IpNet::from_str("192.168.1.1/32").unwrap();
@@ -524,13 +771,13 @@ mod tests {
     #[test]
     fn test_clear_method() {
         use crate::node::BaseNode;
-        
+
         let mut tree = IpRadixTree::new(false);
-        
+
         // Insert networks in random order
         let mut networks = vec![
             "10.0.0.0/8",
-            "10.1.0.0/16", 
+            "10.1.0.0/16",
             "10.1.1.0/24",
             "10.1.2.0/24",
             "10.1.1.128/25",
@@ -538,71 +785,100 @@ mod tests {
             "10.1.1.224/27",
             "10.1.1.240/28",
             "192.168.0.0/16",
-            "192.168.1.0/24"
+            "192.168.1.0/24",
         ];
-        
+
         // Shuffle randomly
         use rand::seq::SliceRandom;
         use rand::thread_rng;
         networks.shuffle(&mut thread_rng());
-        
+
         for net_str in &networks {
             let net = IpNet::from_str(net_str).unwrap();
             tree.insert(net);
         }
-        
+
         // Verify all networks are present
         for net_str in &networks {
             let net = IpNet::from_str(net_str).unwrap();
-            assert!(tree.get(&net).is_some(), "Network {} should be present", net_str);
+            assert!(
+                tree.get(&net).is_some(),
+                "Network {} should be present",
+                net_str
+            );
         }
-        
+
         // Find the node for "10.1.1.0/24" and clear it
         let target_net = IpNet::from_str("10.1.1.0/24").unwrap();
         let canonical = canonicalize_ipnet(&target_net);
         let mut node = &mut tree.root;
         let bits = ipnet_to_bits(&canonical);
         for &bit in &bits {
-            node = node.children.get_mut(&u64::from(bit)).expect("Node should exist");
+            node = node
+                .children
+                .get_mut(&u64::from(bit))
+                .expect("Node should exist");
         }
-        
+
         // Clear the 10.1.1.0/24 node (should clear its children)
         let cleared_hosts = node.clear();
-        
+
         // Should have cleared: 10.1.1.128/25, 10.1.1.192/26, 10.1.1.224/27, 10.1.1.240/28
         let expected_cleared = vec![
             "10.1.1.128/25",
-            "10.1.1.192/26", 
+            "10.1.1.192/26",
             "10.1.1.224/27",
-            "10.1.1.240/28"
+            "10.1.1.240/28",
         ];
-        
-        assert_eq!(cleared_hosts.len(), expected_cleared.len(), 
-                   "Should have cleared {} networks, got {}: {:?}", 
-                   expected_cleared.len(), cleared_hosts.len(), cleared_hosts);
-        
+
+        assert_eq!(
+            cleared_hosts.len(),
+            expected_cleared.len(),
+            "Should have cleared {} networks, got {}: {:?}",
+            expected_cleared.len(),
+            cleared_hosts.len(),
+            cleared_hosts
+        );
+
         // Check that all expected networks were cleared
         for expected in &expected_cleared {
-            assert!(cleared_hosts.contains(&expected.to_string()), 
-                   "Should have cleared {}", expected);
+            assert!(
+                cleared_hosts.contains(&expected.to_string()),
+                "Should have cleared {}",
+                expected
+            );
         }
-        
+
         // Verify the cleared networks are no longer accessible or fall back to parent
         for cleared in &expected_cleared {
             let net = IpNet::from_str(cleared).unwrap();
             let result = tree.get(&net);
-            assert!(result.is_none() || result == Some("10.1.1.0/24".to_string()), 
-                   "Cleared network {} should not be accessible or should fall back to parent", cleared);
+            assert!(
+                result.is_none() || result == Some("10.1.1.0/24".to_string()),
+                "Cleared network {} should not be accessible or should fall back to parent",
+                cleared
+            );
         }
-        
+
         // Verify that 10.1.1.0/24 itself is still accessible
         assert_eq!(tree.get(&target_net), Some("10.1.1.0/24".to_string()));
-        
+
         // Verify that unrelated networks are still accessible
-        let unrelated = vec!["10.0.0.0/8", "10.1.0.0/16", "10.1.2.0/24", "192.168.0.0/16", "192.168.1.0/24"];
+        let unrelated = vec![
+            "10.0.0.0/8",
+            "10.1.0.0/16",
+            "10.1.2.0/24",
+            "192.168.0.0/16",
+            "192.168.1.0/24",
+        ];
         for net_str in &unrelated {
             let net = IpNet::from_str(net_str).unwrap();
-            assert_eq!(tree.get(&net), Some(net_str.to_string()), "Unrelated network {} should still be accessible", net_str);
+            assert_eq!(
+                tree.get(&net),
+                Some(net_str.to_string()),
+                "Unrelated network {} should still be accessible",
+                net_str
+            );
         }
     }
 }

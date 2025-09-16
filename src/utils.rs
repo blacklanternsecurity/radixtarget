@@ -1,7 +1,7 @@
 // utils.rs: Utility functions for radix trees
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
 
 /// Hash a value to u64 using the default hasher
@@ -56,7 +56,10 @@ pub fn host_size_key(host: &str) -> (i64, String) {
             IpNet::V6(net) => (128 - net.prefix_len()) as u64,
         };
         // Format as network address with prefix length (like Python's ipaddress module)
-        (-(num_addresses as i64), format!("{}/{}", ipnet.network(), ipnet.prefix_len()))
+        (
+            -(num_addresses as i64),
+            format!("{}/{}", ipnet.network(), ipnet.prefix_len()),
+        )
     } else if let Ok(ipaddr) = host.parse::<IpAddr>() {
         // Single IP address - use original string to avoid re-formatting
         if ipaddr.is_ipv4() {
@@ -89,10 +92,10 @@ mod tests {
     fn test_host_size_key_ipv4_networks() {
         // /24 network = 32-24 = 8 host bits
         assert_eq!(host_size_key("1.2.3.0/24"), (-8, "1.2.3.0/24".to_string()));
-        
-        // /28 network = 32-28 = 4 host bits  
+
+        // /28 network = 32-28 = 4 host bits
         assert_eq!(host_size_key("1.2.3.0/28"), (-4, "1.2.3.0/28".to_string()));
-        
+
         // /30 network = 32-30 = 2 host bits
         assert_eq!(host_size_key("1.2.3.4/30"), (-2, "1.2.3.4/30".to_string()));
     }
@@ -101,29 +104,47 @@ mod tests {
     fn test_host_size_key_ipv6_networks() {
         // /64 network = 128-64 = 64 host bits (network address is normalized)
         assert_eq!(host_size_key("::1/64"), (-64, "::/64".to_string()));
-        
+
         // /120 network = 128-120 = 8 host bits (network address is normalized)
         assert_eq!(host_size_key("::1/120"), (-8, "::/120".to_string()));
     }
 
     #[test]
     fn test_host_size_key_dns_names() {
-        assert_eq!(host_size_key("evilcorp.com"), (12, "evilcorp.com".to_string()));
-        assert_eq!(host_size_key("www.evilcorp.com"), (16, "www.evilcorp.com".to_string()));
-        assert_eq!(host_size_key("api.www.evilcorp.com"), (20, "api.www.evilcorp.com".to_string()));
+        assert_eq!(
+            host_size_key("evilcorp.com"),
+            (12, "evilcorp.com".to_string())
+        );
+        assert_eq!(
+            host_size_key("www.evilcorp.com"),
+            (16, "www.evilcorp.com".to_string())
+        );
+        assert_eq!(
+            host_size_key("api.www.evilcorp.com"),
+            (20, "api.www.evilcorp.com".to_string())
+        );
     }
 
     #[test]
     fn test_host_size_key_dns_normalization() {
         // Test IDNA normalization and lowercasing
-        assert_eq!(host_size_key("EXAMPLE.COM"), (11, "example.com".to_string()));
-        assert_eq!(host_size_key("Example.Com"), (11, "example.com".to_string()));
+        assert_eq!(
+            host_size_key("EXAMPLE.COM"),
+            (11, "example.com".to_string())
+        );
+        assert_eq!(
+            host_size_key("Example.Com"),
+            (11, "example.com".to_string())
+        );
     }
 
     #[test]
     fn test_normalize_dns_case_insensitive() {
         assert_eq!(normalize_dns("EXAMPLE.COM"), "example.com");
-        assert_eq!(normalize_dns("MiXeD.CaSe.DoMaIn.CoM"), "mixed.case.domain.com");
+        assert_eq!(
+            normalize_dns("MiXeD.CaSe.DoMaIn.CoM"),
+            "mixed.case.domain.com"
+        );
     }
 
     #[test]

@@ -6,11 +6,16 @@ pub trait BaseNode {
     /// Returns true if the node is dead (no data, no children)
     fn is_dead(&self) -> bool;
     /// Returns mutable reference to children as a trait object
-    fn children_mut(&mut self) -> &mut HashMap<u64, Box<Self>> where Self: Sized;
+    fn children_mut(&mut self) -> &mut HashMap<u64, Box<Self>>
+    where
+        Self: Sized;
     /// Returns the host as a string if present
     fn host_string(&self) -> Option<String>;
     /// Prune dead child nodes recursively, returns number pruned
-    fn prune(&mut self) -> usize where Self: Sized {
+    fn prune(&mut self) -> usize
+    where
+        Self: Sized,
+    {
         let mut pruned = 0;
         let keys: Vec<u64> = self.children_mut().keys().copied().collect();
         for key in keys {
@@ -25,7 +30,10 @@ pub trait BaseNode {
         pruned
     }
     /// Clear all children recursively and return deleted hosts
-    fn clear(&mut self) -> Vec<String> where Self: Sized {
+    fn clear(&mut self) -> Vec<String>
+    where
+        Self: Sized,
+    {
         let mut hosts = Vec::new();
         for (_, child) in self.children_mut().iter_mut() {
             hosts.extend(child.clear());
@@ -37,4 +45,3 @@ pub trait BaseNode {
         hosts
     }
 }
-

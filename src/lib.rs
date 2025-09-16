@@ -1,11 +1,11 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
-pub mod utils;
-pub mod ip;
 pub mod dns;
-pub mod target;
+pub mod ip;
 pub mod node;
+pub mod target;
+pub mod utils;
 
 use target::RadixTarget;
 use utils::host_size_key;
@@ -31,10 +31,8 @@ impl PyRadixTarget {
         } else {
             RadixTarget::new(strict_scope)
         };
-        
-        Ok(PyRadixTarget { 
-            inner,
-        })
+
+        Ok(PyRadixTarget { inner })
     }
 
     fn insert(&mut self, value: &str) -> Option<String> {
@@ -61,7 +59,6 @@ impl PyRadixTarget {
         self.inner.get(value)
     }
 
-
     fn prune(&mut self) -> usize {
         self.inner.prune()
     }
@@ -72,9 +69,11 @@ impl PyRadixTarget {
     }
 
     fn __repr__(&self) -> String {
-        format!("RadixTarget(strict_scope={}, {} hosts)", 
-                self.inner.strict_scope(), 
-                self.inner.len())
+        format!(
+            "RadixTarget(strict_scope={}, {} hosts)",
+            self.inner.strict_scope(),
+            self.inner.len()
+        )
     }
 
     fn __eq__(&self, other: &PyRadixTarget) -> bool {
@@ -84,7 +83,7 @@ impl PyRadixTarget {
     fn __hash__(&self) -> u64 {
         self.inner.hash()
     }
-    
+
     fn contains_target(&self, other: &PyRadixTarget) -> bool {
         // Check if all entries in other target are contained in this target
         // This is a simplified implementation - in reality we'd need to iterate
@@ -94,10 +93,7 @@ impl PyRadixTarget {
 
     fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRadixTargetIterator> {
         let hosts: Vec<String> = slf.inner.hosts().iter().cloned().collect();
-        Ok(PyRadixTargetIterator {
-            hosts,
-            index: 0,
-        })
+        Ok(PyRadixTargetIterator { hosts, index: 0 })
     }
 
     fn __bool__(&self) -> bool {
@@ -114,7 +110,7 @@ impl PyRadixTarget {
     fn __str__(&self) -> String {
         let mut hosts: Vec<String> = self.inner.hosts().iter().cloned().collect();
         hosts.sort();
-        
+
         if hosts.len() <= 5 {
             hosts.join(",")
         } else {
