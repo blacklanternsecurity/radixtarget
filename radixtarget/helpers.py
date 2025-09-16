@@ -2,19 +2,7 @@ import re
 import ipaddress
 
 
-def host_size_key(host):
-    """
-    Used for sorting by host size, so that parent dns names / ip subnets always come first
-
-    Notes:
-    - we have to use str(host) to break the tie between two hosts of the same length, e.g. evilcorp.com and evilcorp.net
-    """
-    host = make_ip(host)
-    if is_ip(host):
-        # bigger IP subnets should come first
-        return (-host.num_addresses, str(host))
-    # smaller domains should come first
-    return (len(host), str(host))
+# host_size_key function moved to Rust implementation for better performance
 
 
 def is_ip(host):

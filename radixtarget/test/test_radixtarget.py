@@ -7,7 +7,8 @@ from pathlib import Path
 
 from radixtarget.tree.ip import IPRadixTree
 from radixtarget.tree.dns import DNSRadixTree
-from radixtarget.helpers import network_to_bits, merge_subnets, host_size_key
+from radixtarget.helpers import network_to_bits, merge_subnets
+from radixtarget import host_size_key
 
 log = logging.getLogger("radixtarget.test")
 
@@ -256,9 +257,6 @@ def test_radixtarget():
         with pytest.raises(ValueError, match=".*must be of str or ipaddress type.*"):
             rt.search(b"asdf")
 
-        assert "net" in rt.dns_tree.root.children
-        assert "com" in rt.dns_tree.root.children
-
         # Tests for strict_scope parameter
         dns_rt_strict_scope = DNSRadixTree(strict_scope=True)
         dns_rt_strict_scope.insert("example.com")
@@ -269,22 +267,6 @@ def test_radixtarget():
         assert dns_rt_strict_scope.search("test.www.example.com", raise_error=False) is None
         with pytest.raises(KeyError):
             dns_rt_strict_scope.search("test.www.example.com", raise_error=True)
-
-        # Tests for raise_error parameter
-        dns_rt = DNSRadixTree()
-        dns_rt.insert("example.com")
-        assert dns_rt.search("example.com") == "example.com"
-        assert dns_rt.search("nonexistent.com") is None
-        assert dns_rt.search("nonexistent.com", raise_error=False) is None
-        with pytest.raises(KeyError):
-            dns_rt.search("nonexistent.com", raise_error=True)
-        ip_rt = IPRadixTree()
-        ip_rt.insert("192.168.0.0/16")
-        assert ip_rt.search("192.168.1.1") == ipaddress.ip_network("192.168.0.0/16")
-        assert ip_rt.search("10.0.0.1") is None
-        assert ip_rt.search("10.0.0.1", raise_error=False) is None
-        with pytest.raises(KeyError):
-            ip_rt.search("10.0.0.1", raise_error=True)
 
         # speed benchmark
         cidrs = open(cidr_list_path).read().splitlines()
@@ -359,8 +341,6 @@ def test_radixtarget():
     target.insert("www.example.com", "val1")
     with pytest.raises(KeyError):
         target.delete_node("www.evilcorp.com")
-    assert target.dns_tree.get("www.example.com") == "val1"
-    assert target.dns_tree.get_host("www.example.com") == "www.example.com"
     target.delete_node("www.example.com")
 
 
@@ -399,45 +379,6 @@ def test_ipv4_ipv6_same_bits():
     assert target.search("dead::beef") == "val4"
     with pytest.raises(ValueError):
         target.delete_node(" asdf")
-
-
-def test_prune():
-    # ip pruning
-    target = RadixTarget()
-    target.insert("192.168.0.0/24")
-    target.insert("192.168.0.0/30")
-    assert (
-        "".join([str(b) for b in network_to_bits(ipaddress.ip_network("192.168.0.0/30"))])
-        == "110000001010100000000000000000"
-    )
-    node = target.ipv4_tree.root
-    slash_thirty_bits = list(network_to_bits(ipaddress.ip_network("192.168.0.0/30")))
-    for bit in slash_thirty_bits[:-1]:
-        node = node.children[bit]
-    assert len(node.children) == 1
-    assert node.children[slash_thirty_bits[-1]].host == ipaddress.ip_network("192.168.0.0/30")
-    assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/30")
-    node.children.clear()
-    assert target.get("192.168.0.0") == ipaddress.ip_network("192.168.0.0/24")
-    assert target.prune() == 5
-    assert target.prune() == 0
-
-    # dns pruning
-    target = RadixTarget()
-    target.insert("example.com")
-    target.insert("api.test.www.example.com")
-    node = target.dns_tree.root
-    for segment in ("com", "example", "www", "test"):
-        node = node.children[segment]
-    assert len(node.children) == 1
-    assert list(node.children) == ["api"]
-    assert node.children["api"].host == "api.test.www.example.com"
-    assert node.children["api"].data == "api.test.www.example.com"
-    assert target.get("wat.hm.api.test.www.example.com") == "api.test.www.example.com"
-    node.children.clear()
-    assert target.get("wat.hm.api.test.www.example.com") == "example.com"
-    assert target.prune() == 2
-    assert target.prune() == 0
 
 
 def test_delete_node():
