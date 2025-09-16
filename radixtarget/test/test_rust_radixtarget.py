@@ -513,7 +513,7 @@ def test_acl_mode():
     # This should raise an error
     import pytest
     with pytest.raises(ValueError):  # Should raise ValueError
-        target7 = RadixTarget(acl_mode=True, strict_scope=True)
+        RadixTarget(acl_mode=True, strict_scope=True)
     
     # Test mixed IP and domain ACL optimization
     target8 = RadixTarget(acl_mode=True)
