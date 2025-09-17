@@ -580,12 +580,14 @@ def test_target_hashing():
 
     # Different targets should have different hashes initially
     assert target1.hash != target2.hash
+    assert target1 != target2
 
     # Target created from iteration should have same hash as original
     target3 = RadixTarget()
     for host in target1:
         target3.add(str(host))
     assert target3.hash == target1.hash
+    assert target3 == target1
 
     # Test that strict scope affects hash
     target4 = RadixTarget(strict_scope=True)
@@ -594,10 +596,12 @@ def test_target_hashing():
     target4.add("evilcorp.net")
     assert target4.hash == 6578698081272501171  # Expected hash for strict scope
     assert target4.hash != target1.hash  # Should be different due to strict scope
+    assert target4 != target1
 
     # Test hash equality after making targets equivalent
     target1.add("evilcorp.org")  # Add missing host to target1
     assert target1.hash == target2.hash  # Now they should match
+    assert target1 == target2
     assert target1.hash == 4519009570078867868
 
     # Test empty target hash
@@ -609,9 +613,11 @@ def test_target_hashing():
     # Two empty targets should have same hash
     empty_target2 = RadixTarget()
     assert empty_target.hash == empty_target2.hash
+    assert empty_target == empty_target2
 
     # Empty target should have different hash than populated target
     assert empty_target.hash != target1.hash
+    assert empty_target != target1
 
     # Test hash with mixed IP/DNS content
     mixed_target = RadixTarget()
@@ -634,6 +640,7 @@ def test_target_hashing():
     mixed_target2.add("192.168.1.0/24")
 
     assert mixed_target.hash == mixed_target2.hash
+    assert mixed_target == mixed_target2
 
     print("✓ All target hashing tests passed!")
 
@@ -847,15 +854,9 @@ def test_error_handling():
     validation_missing = []
 
     for test_input in potentially_invalid:
-        try:
-            target.add(test_input)
-            validation_missing.append(test_input)
-            print(f"⚠️  No validation for: {test_input}")
-        except ValueError as e:
-            validation_working.append(test_input)
-            print(f"✓ Validation working for: {test_input} - {e}")
-        except Exception as e:
-            print(f"⚠️  Unexpected error for {test_input}: {e}")
+        target.add(test_input)
+        validation_missing.append(test_input)
+        print(f"⚠️  No validation for: {test_input}")
 
     # Test basic functionality still works
     target2 = RadixTarget()
@@ -882,30 +883,20 @@ def test_radixtarget_benchmark():
     # Path to CIDR test data
     cidr_list_path = Path(__file__).parent / "cidrs.txt"
 
-    # Check if test data exists
-    if not cidr_list_path.exists():
-        print("⚠️  Skipping benchmark - cidrs.txt not found")
-        return
-
     rt = RadixTarget()
 
     # Load CIDR blocks from test file
-    try:
-        with open(cidr_list_path) as f:
-            cidrs = f.read().splitlines()
+    with open(cidr_list_path) as f:
+        cidrs = f.read().splitlines()
 
-        print(f"📊 Loading {len(cidrs)} CIDR blocks for benchmark")
+    print(f"📊 Loading {len(cidrs)} CIDR blocks for benchmark")
 
-        # Insert all CIDR blocks
-        for c in cidrs:
-            if c.strip():  # Skip empty lines
-                rt.insert(c.strip())
+    # Insert all CIDR blocks
+    for c in cidrs:
+        if c.strip():  # Skip empty lines
+            rt.insert(c.strip())
 
-        print(f"✅ Loaded {len(cidrs)} CIDR blocks")
-
-    except Exception as e:
-        print(f"⚠️  Could not load test data: {e}")
-        return
+    print(f"✅ Loaded {len(cidrs)} CIDR blocks")
 
     # Benchmark random IP lookups
     iterations = 10000
@@ -948,10 +939,9 @@ def test_radixtarget_benchmark():
     # This is a rough baseline, actual performance will vary by system
     min_expected_performance = 1000  # lookups per second
 
-    if lookups_per_second >= min_expected_performance:
-        print(f"✓ Performance meets expectations (>= {min_expected_performance:,} lookups/sec)")
-    else:
-        print(f"⚠️  Performance below expected ({lookups_per_second:,} < {min_expected_performance:,} lookups/sec)")
+    assert lookups_per_second >= min_expected_performance, (
+        f"Performance below expected ({lookups_per_second:,} < {min_expected_performance:,} lookups/sec)"
+    )
 
     # Test with actual loaded data - extended benchmark
     print(f"🚀 Extended benchmark against {len(cidrs)} loaded ranges...")
@@ -986,3 +976,30 @@ def test_radixtarget_benchmark():
     print(f"  Hit rate: {(extended_hits / extended_iterations) * 100:.1f}%")
 
     print("✓ All benchmark tests completed!")
+
+
+def test_special_methods_coverage():
+    """Test uncovered special methods in radixtarget.py"""
+    target1 = RadixTarget()
+    target1.add("example.com")
+    target1.add("192.168.1.0/24")
+
+    target2 = RadixTarget()
+    target2.add("example.com")
+    target2.add("192.168.1.0/24")
+
+    # Test __repr__ (line 147)
+    assert repr(target1) == "RadixTarget(strict_scope=false, 2 hosts)"
+
+    # Test __eq__ with non-RadixTarget (line 153)
+    assert not (target1 == "not_a_target")
+    assert not (target1 == 42)
+
+    # Test __hash__ (line 157)
+    hash_val = hash(target1)
+    assert isinstance(hash_val, int)
+
+    # Test __contains__ with RadixTarget (line 129)
+    target3 = RadixTarget()
+    target3.add("example.com")
+    assert target3 in target1  # target3 is subset of target1

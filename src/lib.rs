@@ -90,10 +90,7 @@ impl PyRadixTarget {
     }
 
     fn contains_target(&self, other: &PyRadixTarget) -> bool {
-        // Check if all entries in other target are contained in this target
-        // This is a simplified implementation - in reality we'd need to iterate
-        // through all hosts in the other target
-        self.inner == other.inner || self.__hash__() == other.__hash__()
+        self.inner.contains_target(&other.inner)
     }
 
     fn __iter__(slf: PyRef<'_, Self>) -> PyResult<PyRadixTargetIterator> {
@@ -106,9 +103,6 @@ impl PyRadixTarget {
     }
 
     fn __len__(&self) -> usize {
-        // Python's __len__ calculates total IP addresses, not just unique hosts
-        // For now, we'll return the number of hosts since calculating IP address count
-        // would require parsing each host to determine if it's a network
         self.inner.len()
     }
 
