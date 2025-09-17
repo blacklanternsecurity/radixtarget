@@ -1,6 +1,6 @@
 [project]
 name = "radixtarget"
-version = "4.0.0rc1"
+version = "4.0.1rc1"
 description = "Fast radix tree for IP addresses and DNS names"
 authors = [{name = "TheTechromancer"}]
 license = {text = "GPL-3.0"}
