@@ -1,7 +1,13 @@
 [package]
 name = "radixtarget"
-version = "0.1.0"
+version = "4.0.0-rc1"
 edition = "2024"
+description = "Fast radix tree implementation for IP addresses and hostnames with target matching"
+license = "GPL-3.0"
+repository = "https://github.com/blacklanternsecurity/radixtarget"
+authors = ["TheTechromancer <thetechromancer@protonmail.com>"]
+keywords = ["radix", "tree", "ip", "hostname", "network", "lookup"]
+categories = ["data-structures", "network-programming"]
 
 [lib]
 name = "radixtarget_rust"

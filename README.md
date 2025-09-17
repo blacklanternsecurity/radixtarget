@@ -1,77 +1,152 @@
-# radixtarget-rust
+# RadixTarget
 
-A high-performance radix tree implementation for fast lookups of IP addresses, IP networks, and DNS hostnames, written in Rust.
+[![Python Version](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org) [![Rust Version](https://img.shields.io/badge/rust-1.70+-orange)](https://www.rust-lang.org) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/master/LICENSE) [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml) [![Codecov](https://codecov.io/gh/blacklanternsecurity/radixtarget/graph/badge.svg?token=7IPWMYMTGZ)](https://codecov.io/gh/blacklanternsecurity/radixtarget)
 
-## Features
+RadixTarget is a performant radix implementation designed for quick lookups of IP addresses/networks and DNS hostnames. 
 
-- Written in pure Rust for maximum performance and safety
-- Supports IPv4, IPv6, and DNS hostnames in a unified API
-- Efficient longest-prefix matching for IPs and subdomain matching for DNS
-- Insert, delete, prune, and defragment operations
-- Used for network scope management, firewall rules, and more
+RadixTarget is:
+- Written in Rust with Python bindings
+- Capable of ~200,000 lookups per second regardless of database size
+- 100% test coverage
+- Available as both a Rust crate and Python package
+- Used by:
+    - [BBOT](https://github.com/blacklanternsecurity/bbot)
+    - [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
 
-## Installation
+## Python
 
-Add to your `Cargo.toml`:
+### Installation
 
-```toml
-[dependencies]
-radixtarget_rust = { path = "radixtarget_rust" }
+```bash
+pip install radixtarget
 ```
 
-Or, if published on crates.io:
+### Usage
 
-```toml
-[dependencies]
-radixtarget_rust = "0.1"
+```python
+from radixtarget import RadixTarget
+
+rt = RadixTarget()
+
+# IPv4
+rt.add("192.168.1.0/24")
+rt.get("192.168.1.10") # IPv4Network("192.168.1.0/24")
+rt.get("192.168.2.10") # None
+
+# IPv6
+rt.add("dead::/64")
+rt.get("dead::beef") # IPv6Network("dead::/64")
+rt.get("dead:cafe::beef") # None
+
+# DNS
+rt.add("net")
+rt.add("www.example.com")
+rt.add("test.www.example.com")
+rt.get("net") # "net"
+rt.get("evilcorp.net") # "net"
+rt.get("www.example.com") # "www.example.com"
+rt.get("asdf.test.www.example.com") # "test.www.example.com"
+rt.get("example.com") # None
+
+# Custom data nodes
+rt.add("evilcorp.co.uk", "custom_data")
+rt.get("www.evilcorp.co.uk") # "custom_data"
 ```
 
-## Example Usage
+## Rust
+
+### Installation
+
+```bash
+cargo add radixtarget
+```
+
+### Usage
 
 ```rust
-use radixtarget_rust::target::RadixTarget;
+use radixtarget::{RadixTarget, ScopeMode};
+use std::collections::HashSet;
 
-fn main() {
-    // Create a new RadixTarget (non-strict DNS scope)
-    let mut rt = RadixTarget::new(false);
+// Create a new RadixTarget
+let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
 
-    // IPv4
-    rt.insert("192.168.1.0/24");
-    assert!(rt.get("192.168.1.10").is_some());
-    assert!(rt.get("192.168.2.10").is_none());
+// IPv4 networks and addresses
+rt.insert("192.168.1.0/24"); 
+assert_eq!(rt.get("192.168.1.100"), Some("192.168.1.0/24".to_string()));
+assert_eq!(rt.get("192.168.2.100"), None);
 
-    // IPv6
-    rt.insert("dead::/64");
-    assert!(rt.get("dead::beef").is_some());
-    assert!(rt.get("dead:cafe::beef").is_none());
+// IPv6 networks and addresses  
+rt.insert("dead::/64");
+assert_eq!(rt.get("dead::beef"), Some("dead::/64".to_string()));
+assert_eq!(rt.get("cafe::beef"), None);
 
-    // DNS
-    rt.insert("net");
-    rt.insert("www.example.com");
-    rt.insert("test.www.example.com");
-    assert!(rt.get("net").is_some());
-    assert!(rt.get("evilcorp.net").is_some());
-    assert!(rt.get("www.example.com").is_some());
-    assert!(rt.get("asdf.test.www.example.com").is_some());
-    assert!(rt.get("example.com").is_none());
+// DNS hostnames
+rt.insert("example.com");
+rt.insert("api.test.www.example.com");
+assert_eq!(rt.get("example.com"), Some("example.com".to_string()));
+assert_eq!(rt.get("subdomain.api.test.www.example.com"), 
+           Some("api.test.www.example.com".to_string()));
 
-    // Remove a target
-    rt.delete("www.example.com");
-    assert!(rt.get("www.example.com").is_none());
-}
+// Check if target contains a value
+assert!(rt.contains("192.168.1.50"));
+assert!(rt.contains("dead::1234"));
+assert!(rt.contains("example.com"));
+
+// Get all hosts
+let hosts: HashSet<String> = rt.hosts();
+println!("All hosts: {:?}", hosts);
+
+// Delete targets
+assert!(rt.delete("192.168.1.0/24"));
+assert!(!rt.delete("192.168.1.0/24")); // false - already deleted
+
+// Utility operations
+println!("Number of hosts: {}", rt.len());
+println!("Is empty: {}", rt.is_empty());
+
+// Prune dead nodes (returns number of pruned nodes)
+let pruned_count = rt.prune();
+
+// Defragment overlapping networks (returns (cleaned, new) hosts)
+let (cleaned_hosts, new_hosts) = rt.defrag();
 ```
 
-## API Highlights
+#### Scope Modes
 
-- `RadixTarget::new(strict_scope: bool)`: Create a new tree. If `strict_scope` is true, DNS lookups require exact matches (no subdomain matching).
-- `insert(&mut self, value: &str) -> u64`: Insert an IP network, address, or DNS name. Returns a hash of the canonicalized value.
-- `get(&self, value: &str) -> Option<u64>`: Get the most specific match for a value.
-- `delete(&mut self, value: &str) -> bool`: Remove a value from the tree.
-- `prune(&mut self) -> usize`: Remove unreachable/dead nodes.
-- `defrag(&mut self) -> (HashSet<String>, HashSet<String>)`: Merge adjacent/mergeable nodes and update the set of hosts.
+RadixTarget supports different scope modes for DNS matching:
 
-## Use Cases
+```rust
+use radixtarget::{RadixTarget, ScopeMode};
 
-- Network scope management for security tools
-- Fast IP/DNS allow/block lists
-- Efficient prefix/subdomain matching
+// Normal mode: standard radix tree behavior (default)
+let mut rt_normal = RadixTarget::new(&[], ScopeMode::Normal);
+rt_normal.insert("example.com");
+assert_eq!(rt_normal.get("subdomain.example.com"), Some("example.com".to_string()));
+
+// Strict mode: exact matching only
+let mut rt_strict = RadixTarget::new(&[], ScopeMode::Strict);
+rt_strict.insert("example.com");
+assert_eq!(rt_strict.get("example.com"), Some("example.com".to_string()));
+assert_eq!(rt_strict.get("subdomain.example.com"), None); // No subdomain matching
+
+// ACL mode: Same behavior as normal, but keeps only the highest parent subnet for efficiency
+let mut rt_acl = RadixTarget::new(&[], ScopeMode::Acl);
+rt_acl.insert("192.168.1.0/24");
+rt_acl.insert("192.168.1.0/28");
+// Least specific match is returned instead of most specific
+assert_eq!(rt_acl.get("192.168.1.1"), Some("192.168.1.0/24".to_string()));
+```
+
+#### Initialization with Hosts
+
+```rust
+use radixtarget::{RadixTarget, ScopeMode};
+
+// Initialize with existing hosts
+let hosts = vec!["192.168.1.0/24", "example.com", "dead::/64"];
+let rt = RadixTarget::new(&hosts, ScopeMode::Normal);
+
+assert!(rt.contains("192.168.1.100"));
+assert!(rt.contains("subdomain.example.com"));
+assert!(rt.contains("dead::beef"));
+```

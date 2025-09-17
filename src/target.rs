@@ -98,6 +98,10 @@ impl RadixTarget {
         }
     }
 
+    pub fn contains_target(&self, other: &Self) -> bool {
+        other.hosts().iter().all(|host| self.contains(host))
+    }
+
     /// Delete a target (IP network, IP address, or DNS name). Returns true if deleted.
     pub fn delete(&mut self, value: &str) -> bool {
         // Invalidate cached hash
@@ -1057,5 +1061,374 @@ mod tests {
         // Delete with lowercase unicode
         assert!(rt.delete("café.com"));
         assert_eq!(rt.get("CAFÉ.COM"), None);
+    }
+
+    #[test]
+    fn test_contains_target() {
+        // Test basic containment scenarios
+        let mut superset = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut subset = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut disjoint = RadixTarget::new(&[], ScopeMode::Normal);
+
+        // Setup superset with broad coverage
+        superset.insert("example.com");
+        superset.insert("192.168.0.0/16");
+        superset.insert("test.org");
+        superset.insert("10.0.0.0/8");
+        superset.insert("dead:beef::/32");
+
+        // Setup subset with targets covered by superset
+        subset.insert("sub.example.com"); // covered by example.com
+        subset.insert("192.168.1.100"); // covered by 192.168.0.0/16
+        subset.insert("10.5.5.5"); // covered by 10.0.0.0/8
+
+        // Setup disjoint set with only some overlap
+        disjoint.insert("example.com");
+        disjoint.insert("172.16.1.0/24");
+
+        // Test containment relationships
+        assert!(
+            superset.contains_target(&subset),
+            "Superset should contain subset"
+        );
+        assert!(
+            !subset.contains_target(&superset),
+            "Subset should not contain superset"
+        );
+        assert!(
+            !superset.contains_target(&disjoint),
+            "Superset should not contain disjoint set"
+        );
+        assert!(
+            !disjoint.contains_target(&superset),
+            "Disjoint set should not contain superset"
+        );
+        assert!(
+            !subset.contains_target(&disjoint),
+            "Subset should not contain disjoint set"
+        );
+
+        // Test self-containment
+        assert!(
+            superset.contains_target(&superset),
+            "Target should contain itself"
+        );
+        assert!(
+            subset.contains_target(&subset),
+            "Target should contain itself"
+        );
+        assert!(
+            disjoint.contains_target(&disjoint),
+            "Target should contain itself"
+        );
+
+        // Test empty target containment
+        let empty = RadixTarget::new(&[], ScopeMode::Normal);
+        assert!(
+            superset.contains_target(&empty),
+            "Any target should contain empty target"
+        );
+        assert!(
+            subset.contains_target(&empty),
+            "Any target should contain empty target"
+        );
+        assert!(
+            empty.contains_target(&empty),
+            "Empty target should contain itself"
+        );
+        assert!(
+            !empty.contains_target(&superset),
+            "Empty target should not contain non-empty target"
+        );
+    }
+
+    #[test]
+    fn test_contains_target_ip_networks() {
+        let mut broad = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut specific = RadixTarget::new(&[], ScopeMode::Normal);
+
+        // Broad network coverage
+        broad.insert("192.168.0.0/16");
+        broad.insert("10.0.0.0/8");
+        broad.insert("2001:db8::/32");
+
+        // Specific networks within broad coverage
+        specific.insert("192.168.1.0/24"); // subset of 192.168.0.0/16
+        specific.insert("10.5.0.0/16"); // subset of 10.0.0.0/8
+        specific.insert("2001:db8:1::/48"); // subset of 2001:db8::/32
+
+        assert!(
+            broad.contains_target(&specific),
+            "Broad networks should contain specific subnets"
+        );
+        assert!(
+            !specific.contains_target(&broad),
+            "Specific networks should not contain broader networks"
+        );
+
+        // Test exact matches
+        let mut exact = RadixTarget::new(&[], ScopeMode::Normal);
+        exact.insert("192.168.0.0/16");
+        assert!(
+            broad.contains_target(&exact),
+            "Should contain exact network match"
+        );
+        assert!(exact.contains_target(&exact), "Should contain itself");
+
+        // Test individual IPs
+        let mut single_ips = RadixTarget::new(&[], ScopeMode::Normal);
+        single_ips.insert("192.168.1.100"); // covered by 192.168.0.0/16
+        single_ips.insert("10.0.0.1"); // covered by 10.0.0.0/8
+        single_ips.insert("2001:db8::1"); // covered by 2001:db8::/32
+
+        assert!(
+            broad.contains_target(&single_ips),
+            "Broad networks should contain individual IPs within range"
+        );
+    }
+
+    #[test]
+    fn test_contains_target_dns_hierarchies() {
+        let mut parent = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut child = RadixTarget::new(&[], ScopeMode::Normal);
+
+        // Parent domain coverage (Normal mode allows subdomain matching)
+        parent.insert("example.com");
+        parent.insert("test.org");
+
+        // Child domains
+        child.insert("api.example.com");
+        child.insert("www.example.com");
+        child.insert("sub.test.org");
+
+        assert!(
+            parent.contains_target(&child),
+            "Parent domains should contain subdomains in Normal mode"
+        );
+
+        // Test with exact domain matches
+        let mut exact = RadixTarget::new(&[], ScopeMode::Normal);
+        exact.insert("example.com");
+        assert!(
+            parent.contains_target(&exact),
+            "Should contain exact domain match"
+        );
+    }
+
+    #[test]
+    fn test_contains_target_strict_scope() {
+        let mut strict_parent = RadixTarget::new(&[], ScopeMode::Strict);
+        let mut strict_child = RadixTarget::new(&[], ScopeMode::Strict);
+
+        // In strict mode, subdomains are not automatically matched
+        strict_parent.insert("example.com");
+        strict_child.insert("www.example.com");
+
+        assert!(
+            !strict_parent.contains_target(&strict_child),
+            "Parent domain should not contain subdomain in Strict mode"
+        );
+
+        // But exact matches should work
+        let mut exact = RadixTarget::new(&[], ScopeMode::Strict);
+        exact.insert("example.com");
+        assert!(
+            strict_parent.contains_target(&exact),
+            "Should contain exact match in Strict mode"
+        );
+    }
+
+    #[test]
+    fn test_contains_target_mixed_types() {
+        let mut mixed_superset = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut mixed_subset = RadixTarget::new(&[], ScopeMode::Normal);
+
+        // Superset with various types
+        mixed_superset.insert("example.com"); // DNS
+        mixed_superset.insert("192.168.0.0/16"); // IPv4 network
+        mixed_superset.insert("10.0.0.1"); // IPv4 address
+        mixed_superset.insert("2001:db8::/32"); // IPv6 network
+
+        // Subset with targets covered by superset
+        mixed_subset.insert("api.example.com"); // covered by example.com
+        mixed_subset.insert("192.168.1.100"); // covered by 192.168.0.0/16
+        mixed_subset.insert("10.0.0.1"); // exact match
+        mixed_subset.insert("2001:db8:1::1"); // covered by 2001:db8::/32
+
+        assert!(
+            mixed_superset.contains_target(&mixed_subset),
+            "Mixed superset should contain mixed subset"
+        );
+
+        // Add something not covered
+        mixed_subset.insert("unrelated.net");
+        assert!(
+            !mixed_superset.contains_target(&mixed_subset),
+            "Should not contain subset with uncovered elements"
+        );
+    }
+
+    #[test]
+    fn test_contains_target_partial_overlap() {
+        let mut target1 = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut target2 = RadixTarget::new(&[], ScopeMode::Normal);
+
+        // Partially overlapping sets
+        target1.insert("example.com");
+        target1.insert("192.168.0.0/24");
+        target1.insert("shared.net");
+
+        target2.insert("test.org");
+        target2.insert("10.0.0.0/8");
+        target2.insert("shared.net");
+
+        // Neither should contain the other
+        assert!(
+            !target1.contains_target(&target2),
+            "Partially overlapping sets should not contain each other"
+        );
+        assert!(
+            !target2.contains_target(&target1),
+            "Partially overlapping sets should not contain each other"
+        );
+
+        // Test with just the shared element
+        let mut shared_only = RadixTarget::new(&[], ScopeMode::Normal);
+        shared_only.insert("shared.net");
+        assert!(
+            target1.contains_target(&shared_only),
+            "Should contain subset with only shared elements"
+        );
+        assert!(
+            target2.contains_target(&shared_only),
+            "Should contain subset with only shared elements"
+        );
+    }
+}
+
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+    use std::fs;
+    use std::net::Ipv4Addr;
+    use std::time::Instant;
+
+    fn load_cidrs() -> Vec<String> {
+        let cidr_path = "radixtarget/test/cidrs.txt";
+        fs::read_to_string(cidr_path)
+            .unwrap_or_else(|_| panic!("Failed to read {}", cidr_path))
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.trim().to_string())
+            .collect()
+    }
+
+    #[test]
+    #[ignore] // Use `cargo test --ignored` to run benchmarks
+    fn bench_insertion_performance() {
+        let cidrs = load_cidrs();
+        println!(
+            "📊 Loading {} CIDR blocks for insertion benchmark",
+            cidrs.len()
+        );
+
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+
+        println!("🚀 Starting insertion benchmark...");
+        let start = Instant::now();
+
+        for cidr in &cidrs {
+            rt.insert(cidr);
+        }
+
+        let elapsed = start.elapsed();
+        let insertions_per_second = (cidrs.len() as f64 / elapsed.as_secs_f64()) as u64;
+
+        println!("📈 Insertion Benchmark Results:");
+        println!(
+            "  {} insertions in {:.4} seconds",
+            cidrs.len(),
+            elapsed.as_secs_f64()
+        );
+        println!("  {} insertions/second", insertions_per_second);
+        println!("  Target contains {} hosts", rt.len());
+
+        // Verify some insertions worked
+        assert!(rt.contains("100.20.0.0/14"));
+        assert!(rt.get("100.20.1.1").is_some());
+
+        println!(
+            "✓ Insertion benchmark completed: {} insertions/second",
+            insertions_per_second
+        );
+    }
+
+    #[test]
+    #[ignore] // Use `cargo test --ignored` to run benchmarks
+    fn bench_lookup_performance() {
+        let cidrs = load_cidrs();
+        println!(
+            "📊 Loading {} CIDR blocks for lookup benchmark",
+            cidrs.len()
+        );
+
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+
+        // Insert all CIDRs first
+        for cidr in &cidrs {
+            rt.insert(cidr);
+        }
+
+        println!("✅ Loaded {} CIDR blocks", cidrs.len());
+
+        // Generate random IPv4 addresses for lookup testing
+        let iterations = 100_000;
+        println!("📋 Pre-generating {} test IPs...", iterations);
+
+        let mut test_ips = Vec::with_capacity(iterations);
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        for i in 0..iterations {
+            // Use a simple PRNG based on index for reproducible results
+            let mut hasher = DefaultHasher::new();
+            i.hash(&mut hasher);
+            let random_u32 = (hasher.finish() % (u32::MAX as u64)) as u32;
+            let ip = Ipv4Addr::from(random_u32);
+            test_ips.push(ip.to_string());
+        }
+
+        println!("🚀 Running lookup benchmark...");
+        let start = Instant::now();
+        let mut hits = 0;
+        let mut misses = 0;
+
+        for ip in &test_ips {
+            match rt.get(ip) {
+                Some(_) => hits += 1,
+                None => misses += 1,
+            }
+        }
+
+        let elapsed = start.elapsed();
+        let lookups_per_second = (iterations as f64 / elapsed.as_secs_f64()) as u64;
+
+        println!("📈 Lookup Benchmark Results:");
+        println!(
+            "  {} iterations in {:.4} seconds",
+            iterations,
+            elapsed.as_secs_f64()
+        );
+        println!("  {} lookups/second", lookups_per_second);
+        println!("  {} hits, {} misses", hits, misses);
+        println!(
+            "  Hit rate: {:.1}%",
+            (hits as f64 / iterations as f64) * 100.0
+        );
+
+        println!(
+            "✓ Lookup benchmark completed: {} lookups/second",
+            lookups_per_second
+        );
     }
 }

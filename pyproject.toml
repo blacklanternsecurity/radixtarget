@@ -1,6 +1,6 @@
 [project]
 name = "radixtarget"
-dynamic = ["version"]
+version = "4.0.0rc1"
 description = "Fast radix tree for IP addresses and DNS names"
 authors = [{name = "TheTechromancer"}]
 license = {text = "GPL-3.0"}
@@ -28,7 +28,7 @@ Repository = "https://github.com/blacklanternsecurity/radixtarget"
 "Bug Tracker" = "https://github.com/blacklanternsecurity/radixtarget/issues"
 
 [build-system]
-requires = ["maturin>=1.0,<2.0", "poetry-dynamic-versioning"]
+requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
@@ -38,15 +38,6 @@ module-name = "radixtarget._radixtarget"
 line-length = 119
 lint.ignore = ["E402", "E713", "E721", "E741", "F401", "F403", "F405"]
 
-[tool.poetry]
-name = "radixtarget"
-version = "0.0.0"  # placeholder, will be replaced by dynamic versioning
-
-[tool.poetry-dynamic-versioning]
-enable = true
-vcs = "git"
-style = "semver"
-format-jinja = "4.0.{{ distance }}"
 
 [tool.poetry.group.dev.dependencies]
 maturin = "^1.9.4"
