@@ -1,6 +1,6 @@
 [package]
 name = "radixtarget"
-version = "4.0.0-rc1"
+version = "4.0.0-rc.1"
 edition = "2024"
 description = "Fast radix tree implementation for IP addresses and hostnames with target matching"
 license = "GPL-3.0"
