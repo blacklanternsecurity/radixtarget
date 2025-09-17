@@ -6,7 +6,7 @@ description = "Fast radix tree implementation for IP addresses and hostnames wit
 license = "GPL-3.0"
 repository = "https://github.com/blacklanternsecurity/radixtarget"
 authors = ["TheTechromancer <thetechromancer@protonmail.com>"]
-keywords = ["radix", "tree", "ip", "hostname", "network", "lookup"]
+keywords = ["radix", "tree", "ip", "network", "dns"]
 categories = ["data-structures", "network-programming"]
 
 [lib]
