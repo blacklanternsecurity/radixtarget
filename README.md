@@ -1,51 +1,77 @@
-# RadixTarget
+# radixtarget-rust
 
-[![Python Version](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/master/LICENSE) [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml) [![Codecov](https://codecov.io/gh/blacklanternsecurity/radixtarget/graph/badge.svg?token=7IPWMYMTGZ)](https://codecov.io/gh/blacklanternsecurity/radixtarget)
+A high-performance radix tree implementation for fast lookups of IP addresses, IP networks, and DNS hostnames, written in Rust.
 
-RadixTarget is a performant radix implementation designed for quick lookups of IP addresses/networks and DNS hostnames. 
+## Features
 
-RadixTarget is:
-- Written in pure python
-- Capable of ~100,000 lookups per second regardless of database size
-- 100% test coverage
-- Used by:
-    - [BBOT](https://github.com/blacklanternsecurity/bbot)
-    - [cloudcheck](https://github.com/blacklanternsecurity/cloudcheck)
+- Written in pure Rust for maximum performance and safety
+- Supports IPv4, IPv6, and DNS hostnames in a unified API
+- Efficient longest-prefix matching for IPs and subdomain matching for DNS
+- Insert, delete, prune, and defragment operations
+- Used for network scope management, firewall rules, and more
 
-### Installation ([PyPi](https://pypi.org/project/radixtarget/))
+## Installation
 
-```bash
-pip install radixtarget
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+radixtarget_rust = { path = "radixtarget_rust" }
 ```
 
-### Example Usage
+Or, if published on crates.io:
 
-```python
-from radixtarget import RadixTarget
-
-rt = RadixTarget()
-
-# IPv4
-rt.add("192.168.1.0/24")
-rt.get("192.168.1.10") # IPv4Network("192.168.1.0/24")
-rt.get("192.168.2.10") # None
-
-# IPv6
-rt.add("dead::/64")
-rt.get("dead::beef") # IPv6Network("dead::/64")
-rt.get("dead:cafe::beef") # None
-
-# DNS
-rt.add("net")
-rt.add("www.example.com")
-rt.add("test.www.example.com")
-rt.get("net") # "net"
-rt.get("evilcorp.net") # "net"
-rt.get("www.example.com") # "www.example.com"
-rt.get("asdf.test.www.example.com") # "test.www.example.com"
-rt.get("example.com") # None
-
-# Custom data nodes
-rt.add("evilcorp.co.uk", "custom_data")
-rt.get("www.evilcorp.co.uk") # "custom_data"
+```toml
+[dependencies]
+radixtarget_rust = "0.1"
 ```
+
+## Example Usage
+
+```rust
+use radixtarget_rust::target::RadixTarget;
+
+fn main() {
+    // Create a new RadixTarget (non-strict DNS scope)
+    let mut rt = RadixTarget::new(false);
+
+    // IPv4
+    rt.insert("192.168.1.0/24");
+    assert!(rt.get("192.168.1.10").is_some());
+    assert!(rt.get("192.168.2.10").is_none());
+
+    // IPv6
+    rt.insert("dead::/64");
+    assert!(rt.get("dead::beef").is_some());
+    assert!(rt.get("dead:cafe::beef").is_none());
+
+    // DNS
+    rt.insert("net");
+    rt.insert("www.example.com");
+    rt.insert("test.www.example.com");
+    assert!(rt.get("net").is_some());
+    assert!(rt.get("evilcorp.net").is_some());
+    assert!(rt.get("www.example.com").is_some());
+    assert!(rt.get("asdf.test.www.example.com").is_some());
+    assert!(rt.get("example.com").is_none());
+
+    // Remove a target
+    rt.delete("www.example.com");
+    assert!(rt.get("www.example.com").is_none());
+}
+```
+
+## API Highlights
+
+- `RadixTarget::new(strict_scope: bool)`: Create a new tree. If `strict_scope` is true, DNS lookups require exact matches (no subdomain matching).
+- `insert(&mut self, value: &str) -> u64`: Insert an IP network, address, or DNS name. Returns a hash of the canonicalized value.
+- `get(&self, value: &str) -> Option<u64>`: Get the most specific match for a value.
+- `delete(&mut self, value: &str) -> bool`: Remove a value from the tree.
+- `prune(&mut self) -> usize`: Remove unreachable/dead nodes.
+- `defrag(&mut self) -> (HashSet<String>, HashSet<String>)`: Merge adjacent/mergeable nodes and update the set of hosts.
+
+## Use Cases
+
+- Network scope management for security tools
+- Fast IP/DNS allow/block lists
+- Efficient prefix/subdomain matching

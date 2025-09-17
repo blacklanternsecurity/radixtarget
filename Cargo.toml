@@ -1,0 +1,17 @@
+[package]
+name = "radixtarget"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "radixtarget_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+idna = "1.0.3"
+ipnet = "2.10"
+pyo3 = { version = "0.26", features = ["extension-module"] }
+seahash = "4.1"
+
+[dev-dependencies]
+rand = "0.8"

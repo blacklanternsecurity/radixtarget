@@ -1,33 +1,55 @@
-[tool.poetry]
+[project]
 name = "radixtarget"
-version = "2.0.0"
-description = "Check whether an IP address belongs to a cloud provider"
-authors = ["TheTechromancer"]
-license = "GPL-3.0"
+dynamic = ["version"]
+description = "Fast radix tree for IP addresses and DNS names"
+authors = [{name = "TheTechromancer"}]
+license = {text = "GPL-3.0"}
 readme = "README.md"
-repository = "https://github.com/blacklanternsecurity/radixtarget"
-homepage = "https://github.com/blacklanternsecurity/radixtarget"
+requires-python = ">=3.9"
+keywords = ["radix", "tree", "ip", "dns", "networking"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Networking",
+]
 
-[tool.poetry.urls]
-"PyPi" = "https://pypi.org/project/radixtarget/"
+[project.urls]
+Homepage = "https://github.com/blacklanternsecurity/radixtarget"
+Repository = "https://github.com/blacklanternsecurity/radixtarget"
+"Bug Tracker" = "https://github.com/blacklanternsecurity/radixtarget/issues"
 
-[tool.poetry.dependencies]
-python = "^3.9"
+[build-system]
+requires = ["maturin>=1.0,<2.0", "poetry-dynamic-versioning"]
+build-backend = "maturin"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.1.1"
-pytest-cov = ">=5,<7"
-ruff = ">=0.8.1,<0.10.0"
+[tool.maturin]
+module-name = "radixtarget._radixtarget"
 
 [tool.ruff]
 line-length = 119
 lint.ignore = ["E402", "E713", "E721", "E741", "F401", "F403", "F405"]
 
+[tool.poetry]
+name = "radixtarget"
+version = "0.0.0"  # placeholder, will be replaced by dynamic versioning
+
 [tool.poetry-dynamic-versioning]
 enable = true
-metadata = false
-format-jinja = 'v3.0.{{ distance }}'
+vcs = "git"
+style = "semver"
+format-jinja = "4.0.{{ distance }}"
 
-[build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
-build-backend = "poetry_dynamic_versioning.backend"
+[tool.poetry.group.dev.dependencies]
+maturin = "^1.9.4"
+pytest = "^8.1.1"
+pytest-cov = "^5.0.0"
+ruff = "^0.8.1"
