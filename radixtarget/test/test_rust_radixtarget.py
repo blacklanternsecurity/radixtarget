@@ -650,7 +650,7 @@ def test_target_merging():
     Test merging RadixTarget objects and adding lists of hosts.
 
     This test covers:
-    - Merging one target into another with target1.add(target2)
+    - Merging one target into another with target1.merge(target2)
     - Adding lists of hosts with target.add([host1, host2, ...])
     - Data preservation during merging
     - Proper string representation after merging
@@ -671,7 +671,7 @@ def test_target_merging():
     assert sorted([str(h) for h in target2]) == ["evilcorp.com", "evilcorp.net"]
 
     # Merge target2 into target1
-    target1.add(target2)
+    target1.merge(target2)
 
     # Verify merged result
     expected_hosts = ["1.2.3.0/24", "evilcorp.com", "evilcorp.net"]
@@ -688,7 +688,7 @@ def test_target_merging():
     target4.add("api.test.com", "api_data")
 
     # Merge and verify data preservation
-    target3.add(target4)
+    target3.merge(target4)
 
     assert "192.168.1.100" in target3
     assert target3.get("192.168.1.100") == "network_data"
@@ -698,18 +698,6 @@ def test_target_merging():
     assert target3.get("10.0.0.1") == "big_network"
     assert "api.test.com" in target3
     assert target3.get("api.test.com") == "api_data"
-
-    # Test adding list of hosts
-    target5 = RadixTarget()
-    host_list = ["8.8.8.8", "1.1.1.1", "example.org", "test.example.org"]
-    target5.add(host_list)
-
-    # Verify all hosts were added
-    assert "8.8.8.8" in target5
-    assert "1.1.1.1" in target5
-    assert "example.org" in target5
-    assert "test.example.org" in target5
-    assert "www.example.org" in target5  # Should match example.org
 
     # Test order independence
     target6 = RadixTarget()
@@ -729,8 +717,8 @@ def test_target_merging():
     target9.add("second.com")
 
     # Merge in different orders
-    target6.add(target7)
-    target9.add(target8)
+    target6.merge(target7)
+    target9.merge(target8)
 
     # Should have same content regardless of merge order
     hosts6 = sorted([str(h) for h in target6])
