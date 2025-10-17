@@ -1,6 +1,6 @@
 [package]
 name = "radixtarget"
-version = "4.0.0-rc.1"
+version = "4.0.1"
 edition = "2024"
 description = "Fast radix tree implementation for IP addresses and hostnames with target matching"
 license = "GPL-3.0"
@@ -11,7 +11,7 @@ categories = ["data-structures", "network-programming"]
 
 [lib]
 name = "radixtarget_rust"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 idna = "1.0.3"
