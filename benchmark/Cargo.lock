@@ -433,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "radixtarget"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "idna",
  "ipnet",
