@@ -393,146 +393,106 @@ fn main() {
 
     println!("### IPv4 Insert Performance");
     println!();
-    println!("| Library | Networks | Time (ms) | Inserts/sec |");
-    println!("| ------- | -------- | --------- | ----------- |");
+    println!("| Library | Networks | Time (ms) | Inserts/sec | Speed vs RadixTarget |");
+    println!("| ------- | -------- | --------- | ----------- | -------------------- |");
     println!(
-        "| RadixTarget | {} | {:.2} | {:.0} |",
+        "| RadixTarget | {} | {:.2} | {:.0} | 1.0x |",
         ipv4_radixtarget_insert.networks_inserted,
         ipv4_radixtarget_insert.insert_time_ms,
         ipv4_radixtarget_insert.inserts_per_second
     );
+
+    let ipv4_insert_speedup = ipv4_ip_network_table_insert.inserts_per_second
+        / ipv4_radixtarget_insert.inserts_per_second;
+    let ipv4_insert_comparison = format!("{:.1}x", ipv4_insert_speedup);
+
     println!(
-        "| ip_network_table | {} | {:.2} | {:.0} |",
+        "| ip_network_table | {} | {:.2} | {:.0} | {} |",
         ipv4_ip_network_table_insert.networks_inserted,
         ipv4_ip_network_table_insert.insert_time_ms,
-        ipv4_ip_network_table_insert.inserts_per_second
+        ipv4_ip_network_table_insert.inserts_per_second,
+        ipv4_insert_comparison
     );
     println!();
 
     println!("### IPv4 Lookup Performance");
     println!();
-    println!("| Library | Networks in Table | Lookups | Time (ms) | Lookups/sec | Hit Rate |");
-    println!("| ------- | ----------------- | ------- | --------- | ----------- | -------- |");
+    println!("| Library | Networks in Table | Lookups | Time (ms) | Lookups/sec | Hit Rate | Speed vs RadixTarget |");
+    println!("| ------- | ----------------- | ------- | --------- | ----------- | -------- | -------------------- |");
     println!(
-        "| RadixTarget | {} | {} | {:.2} | {:.0} | {:.1}% |",
+        "| RadixTarget | {} | {} | {:.2} | {:.0} | {:.1}% | 1.0x |",
         ipv4_radixtarget_lookup.networks_in_table,
         ipv4_radixtarget_lookup.lookups_performed,
         ipv4_radixtarget_lookup.lookup_time_ms,
         ipv4_radixtarget_lookup.lookups_per_second,
         ipv4_radixtarget_lookup.hit_rate * 100.0
     );
+
+    let ipv4_lookup_speedup = ipv4_ip_network_table_lookup.lookups_per_second
+        / ipv4_radixtarget_lookup.lookups_per_second;
+    let ipv4_lookup_comparison = format!("{:.1}x", ipv4_lookup_speedup);
+
     println!(
-        "| ip_network_table | {} | {} | {:.2} | {:.0} | {:.1}% |",
+        "| ip_network_table | {} | {} | {:.2} | {:.0} | {:.1}% | {} |",
         ipv4_ip_network_table_lookup.networks_in_table,
         ipv4_ip_network_table_lookup.lookups_performed,
         ipv4_ip_network_table_lookup.lookup_time_ms,
         ipv4_ip_network_table_lookup.lookups_per_second,
-        ipv4_ip_network_table_lookup.hit_rate * 100.0
+        ipv4_ip_network_table_lookup.hit_rate * 100.0,
+        ipv4_lookup_comparison
     );
     println!();
 
     println!("### IPv6 Insert Performance");
     println!();
-    println!("| Library | Networks | Time (ms) | Inserts/sec |");
-    println!("| ------- | -------- | --------- | ----------- |");
+    println!("| Library | Networks | Time (ms) | Inserts/sec | Speed vs RadixTarget |");
+    println!("| ------- | -------- | --------- | ----------- | -------------------- |");
     println!(
-        "| RadixTarget | {} | {:.2} | {:.0} |",
+        "| RadixTarget | {} | {:.2} | {:.0} | 1.0x |",
         ipv6_radixtarget_insert.networks_inserted,
         ipv6_radixtarget_insert.insert_time_ms,
         ipv6_radixtarget_insert.inserts_per_second
     );
+
+    let ipv6_insert_speedup = ipv6_ip_network_table_insert.inserts_per_second
+        / ipv6_radixtarget_insert.inserts_per_second;
+    let ipv6_insert_comparison = format!("{:.1}x", ipv6_insert_speedup);
+
     println!(
-        "| ip_network_table | {} | {:.2} | {:.0} |",
+        "| ip_network_table | {} | {:.2} | {:.0} | {} |",
         ipv6_ip_network_table_insert.networks_inserted,
         ipv6_ip_network_table_insert.insert_time_ms,
-        ipv6_ip_network_table_insert.inserts_per_second
+        ipv6_ip_network_table_insert.inserts_per_second,
+        ipv6_insert_comparison
     );
     println!();
 
     println!("### IPv6 Lookup Performance");
     println!();
-    println!("| Library | Networks in Table | Lookups | Time (ms) | Lookups/sec | Hit Rate |");
-    println!("| ------- | ----------------- | ------- | --------- | ----------- | -------- |");
+    println!("| Library | Networks in Table | Lookups | Time (ms) | Lookups/sec | Hit Rate | Speed vs RadixTarget |");
+    println!("| ------- | ----------------- | ------- | --------- | ----------- | -------- | -------------------- |");
     println!(
-        "| RadixTarget | {} | {} | {:.2} | {:.0} | {:.1}% |",
+        "| RadixTarget | {} | {} | {:.2} | {:.0} | {:.1}% | 1.0x |",
         ipv6_radixtarget_lookup.networks_in_table,
         ipv6_radixtarget_lookup.lookups_performed,
         ipv6_radixtarget_lookup.lookup_time_ms,
         ipv6_radixtarget_lookup.lookups_per_second,
         ipv6_radixtarget_lookup.hit_rate * 100.0
     );
+
+    let ipv6_lookup_speedup = ipv6_ip_network_table_lookup.lookups_per_second
+        / ipv6_radixtarget_lookup.lookups_per_second;
+    let ipv6_lookup_comparison = format!("{:.1}x", ipv6_lookup_speedup);
+
     println!(
-        "| ip_network_table | {} | {} | {:.2} | {:.0} | {:.1}% |",
+        "| ip_network_table | {} | {} | {:.2} | {:.0} | {:.1}% | {} |",
         ipv6_ip_network_table_lookup.networks_in_table,
         ipv6_ip_network_table_lookup.lookups_performed,
         ipv6_ip_network_table_lookup.lookup_time_ms,
         ipv6_ip_network_table_lookup.lookups_per_second,
-        ipv6_ip_network_table_lookup.hit_rate * 100.0
+        ipv6_ip_network_table_lookup.hit_rate * 100.0,
+        ipv6_lookup_comparison
     );
-    println!();
-
-    // Performance comparison
-    let ipv4_insert_speedup =
-        ipv4_ip_network_table_insert.insert_time_ms / ipv4_radixtarget_insert.insert_time_ms;
-    let ipv4_lookup_speedup =
-        ipv4_ip_network_table_lookup.lookup_time_ms / ipv4_radixtarget_lookup.lookup_time_ms;
-    let ipv6_insert_speedup =
-        ipv6_ip_network_table_insert.insert_time_ms / ipv6_radixtarget_insert.insert_time_ms;
-    let ipv6_lookup_speedup =
-        ipv6_ip_network_table_lookup.lookup_time_ms / ipv6_radixtarget_lookup.lookup_time_ms;
-
-    println!("### Performance Comparison");
-    println!();
-    println!("| IP Version | Operation | Winner | Speedup |");
-    println!("| ---------- | --------- | ------ | ------- |");
-
-    if ipv4_insert_speedup > 1.0 {
-        println!(
-            "| IPv4 | Insert | RadixTarget | {:.2}x faster |",
-            ipv4_insert_speedup
-        );
-    } else {
-        println!(
-            "| IPv4 | Insert | ip_network_table | {:.2}x faster |",
-            1.0 / ipv4_insert_speedup
-        );
-    }
-
-    if ipv4_lookup_speedup > 1.0 {
-        println!(
-            "| IPv4 | Lookup | RadixTarget | {:.2}x faster |",
-            ipv4_lookup_speedup
-        );
-    } else {
-        println!(
-            "| IPv4 | Lookup | ip_network_table | {:.2}x faster |",
-            1.0 / ipv4_lookup_speedup
-        );
-    }
-
-    if ipv6_insert_speedup > 1.0 {
-        println!(
-            "| IPv6 | Insert | RadixTarget | {:.2}x faster |",
-            ipv6_insert_speedup
-        );
-    } else {
-        println!(
-            "| IPv6 | Insert | ip_network_table | {:.2}x faster |",
-            1.0 / ipv6_insert_speedup
-        );
-    }
-
-    if ipv6_lookup_speedup > 1.0 {
-        println!(
-            "| IPv6 | Lookup | RadixTarget | {:.2}x faster |",
-            ipv6_lookup_speedup
-        );
-    } else {
-        println!(
-            "| IPv6 | Lookup | ip_network_table | {:.2}x faster |",
-            1.0 / ipv6_lookup_speedup
-        );
-    }
     println!();
 
     // Save results
