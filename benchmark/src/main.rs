@@ -12,7 +12,7 @@ use ip_network_table::IpNetworkTable;
 #[command(name = "radixtarget-benchmark")]
 #[command(about = "Benchmark RadixTarget performance")]
 struct Args {
-    #[arg(short, long, default_value = "1000000")]
+    #[arg(short, long, default_value = "100000")]
     size: usize,
     
     #[arg(short, long, default_value = "10000")]
@@ -22,6 +22,7 @@ struct Args {
 #[derive(Serialize, Deserialize)]
 struct BenchmarkResult {
     library: String,
+    ip_version: String,
     size: usize,
     lookups: usize,
     insert_time_ms: f64,
@@ -30,13 +31,12 @@ struct BenchmarkResult {
     hit_rate: f64,
 }
 
-fn generate_ip_data(size: usize) -> (Vec<String>, Vec<String>) {
+fn generate_ipv4_data(size: usize) -> Vec<String> {
     let mut rng = thread_rng();
     let mut ipv4_networks = Vec::new();
-    let mut ipv6_networks = Vec::new();
     
     // Generate IPv4 networks with proper network addresses
-    for _ in 0..size/2 {
+    for _ in 0..size {
         let prefix = rng.gen_range(1..=32);
         
         // Generate a random IP and normalize it to the network address
@@ -58,8 +58,15 @@ fn generate_ip_data(size: usize) -> (Vec<String>, Vec<String>) {
         ipv4_networks.push(format!("{}.{}.{}.{}/{}", na, nb, nc, nd, prefix));
     }
     
+    ipv4_networks
+}
+
+fn generate_ipv6_data(size: usize) -> Vec<String> {
+    let mut rng = thread_rng();
+    let mut ipv6_networks = Vec::new();
+    
     // Generate IPv6 networks with proper network addresses
-    for _ in 0..size/2 {
+    for _ in 0..size {
         let prefix = rng.gen_range(1..=128);
         
         // Generate random IPv6 segments
@@ -92,15 +99,15 @@ fn generate_ip_data(size: usize) -> (Vec<String>, Vec<String>) {
         ipv6_networks.push(format!("{}/{}", network_str, prefix));
     }
     
-    (ipv4_networks, ipv6_networks)
+    ipv6_networks
 }
 
-fn generate_lookup_ips(lookup_count: usize) -> Vec<String> {
+fn generate_ipv4_lookup_ips(lookup_count: usize) -> Vec<String> {
     let mut rng = thread_rng();
     let mut lookup_ips = Vec::new();
     
     // Generate completely random IPv4 lookups
-    for _ in 0..lookup_count/2 {
+    for _ in 0..lookup_count {
         let a = rng.gen_range(1..=255);
         let b = rng.gen_range(0..=255);
         let c = rng.gen_range(0..=255);
@@ -108,8 +115,15 @@ fn generate_lookup_ips(lookup_count: usize) -> Vec<String> {
         lookup_ips.push(format!("{}.{}.{}.{}", a, b, c, d));
     }
     
+    lookup_ips
+}
+
+fn generate_ipv6_lookup_ips(lookup_count: usize) -> Vec<String> {
+    let mut rng = thread_rng();
+    let mut lookup_ips = Vec::new();
+    
     // Generate completely random IPv6 lookups
-    for _ in 0..lookup_count/2 {
+    for _ in 0..lookup_count {
         let segments: Vec<String> = (0..8)
             .map(|_| format!("{:x}", rng.gen::<u16>()))
             .collect();
@@ -119,16 +133,13 @@ fn generate_lookup_ips(lookup_count: usize) -> Vec<String> {
     lookup_ips
 }
 
-fn benchmark_radixtarget_with_ips(ipv4_networks: &[String], ipv6_networks: &[String], lookup_ips: &[String]) -> BenchmarkResult {
+fn benchmark_radixtarget(networks: &[String], lookup_ips: &[String], ip_version: &str) -> BenchmarkResult {
     
     // Benchmark insertion
     let start = Instant::now();
     let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
     
-    for network in ipv4_networks {
-        rt.insert(network);
-    }
-    for network in ipv6_networks {
+    for network in networks {
         rt.insert(network);
     }
     
@@ -150,7 +161,8 @@ fn benchmark_radixtarget_with_ips(ipv4_networks: &[String], ipv6_networks: &[Str
     
     BenchmarkResult {
         library: "radixtarget".to_string(),
-        size: ipv4_networks.len() + ipv6_networks.len(),
+        ip_version: ip_version.to_string(),
+        size: networks.len(),
         lookups: lookup_ips.len(),
         insert_time_ms: insert_time.as_secs_f64() * 1000.0,
         lookup_time_ms: lookup_time.as_secs_f64() * 1000.0,
@@ -159,18 +171,13 @@ fn benchmark_radixtarget_with_ips(ipv4_networks: &[String], ipv6_networks: &[Str
     }
 }
 
-fn benchmark_ip_network_table_with_ips(ipv4_networks: &[String], ipv6_networks: &[String], lookup_ips: &[String]) -> BenchmarkResult {
+fn benchmark_ip_network_table(networks: &[String], lookup_ips: &[String], ip_version: &str) -> BenchmarkResult {
     
     // Benchmark insertion
     let start = Instant::now();
     let mut table: IpNetworkTable<String> = IpNetworkTable::new();
     
-    for network in ipv4_networks {
-        if let Ok(ip_network) = IpNetwork::from_str(network) {
-            table.insert(ip_network, network.clone());
-        }
-    }
-    for network in ipv6_networks {
+    for network in networks {
         if let Ok(ip_network) = IpNetwork::from_str(network) {
             table.insert(ip_network, network.clone());
         }
@@ -202,7 +209,8 @@ fn benchmark_ip_network_table_with_ips(ipv4_networks: &[String], ipv6_networks: 
     
     BenchmarkResult {
         library: "ip_network_table".to_string(),
-        size: ipv4_networks.len() + ipv6_networks.len(),
+        ip_version: ip_version.to_string(),
+        size: networks.len(),
         lookups: parsed_lookup_ips.len(),
         insert_time_ms: insert_time.as_secs_f64() * 1000.0,
         lookup_time_ms: lookup_time.as_secs_f64() * 1000.0,
@@ -296,59 +304,97 @@ fn main() {
     }
     println!();
     
-    println!("Generating {} IP networks...", args.size);
-    let (ipv4_networks, ipv6_networks) = generate_ip_data(args.size);
+    println!("Generating {} IPv4 networks...", args.size);
+    let ipv4_networks = generate_ipv4_data(args.size);
+    let ipv4_lookup_ips = generate_ipv4_lookup_ips(args.lookups);
     
-    // Generate lookup IPs once for both benchmarks
-    let lookup_ips = generate_lookup_ips(args.lookups);
+    println!("Generating {} IPv6 networks...", args.size);
+    let ipv6_networks = generate_ipv6_data(args.size);
+    let ipv6_lookup_ips = generate_ipv6_lookup_ips(args.lookups);
     
-    println!("Running RadixTarget benchmark...");
-    let radixtarget_result = benchmark_radixtarget_with_ips(&ipv4_networks, &ipv6_networks, &lookup_ips);
+    println!("Running IPv4 benchmarks...");
+    let ipv4_radixtarget_result = benchmark_radixtarget(&ipv4_networks, &ipv4_lookup_ips, "IPv4");
+    let ipv4_ip_network_table_result = benchmark_ip_network_table(&ipv4_networks, &ipv4_lookup_ips, "IPv4");
     
-    println!("Running ip_network_table benchmark...");
-    let ip_network_table_result = benchmark_ip_network_table_with_ips(&ipv4_networks, &ipv6_networks, &lookup_ips);
+    println!("Running IPv6 benchmarks...");
+    let ipv6_radixtarget_result = benchmark_radixtarget(&ipv6_networks, &ipv6_lookup_ips, "IPv6");
+    let ipv6_ip_network_table_result = benchmark_ip_network_table(&ipv6_networks, &ipv6_lookup_ips, "IPv6");
     
-    println!("\n=== BENCHMARK RESULTS ===");
-    println!("Networks: {} ({} IPv4, {} IPv6)", radixtarget_result.size, ipv4_networks.len(), ipv6_networks.len());
-    println!("Lookups: {}", radixtarget_result.lookups);
+    println!("## RadixTarget Benchmark Results");
+    println!();
+    println!("### IPv4 Performance");
+    println!();
+    println!("| Library | Networks | Lookups | Insert Time (ms) | Lookup Time (ms) | Ops/sec | Hit Rate |");
+    println!("| ------- | -------- | ------- | ---------------- | ---------------- | ------- | -------- |");
+    println!("| RadixTarget | {} | {} | {:.2} | {:.2} | {:.0} | {:.1}% |", 
+             ipv4_networks.len(), ipv4_radixtarget_result.lookups, 
+             ipv4_radixtarget_result.insert_time_ms, ipv4_radixtarget_result.lookup_time_ms,
+             ipv4_radixtarget_result.ops_per_second, ipv4_radixtarget_result.hit_rate * 100.0);
+    println!("| ip_network_table | {} | {} | {:.2} | {:.2} | {:.0} | {:.1}% |", 
+             ipv4_networks.len(), ipv4_ip_network_table_result.lookups,
+             ipv4_ip_network_table_result.insert_time_ms, ipv4_ip_network_table_result.lookup_time_ms,
+             ipv4_ip_network_table_result.ops_per_second, ipv4_ip_network_table_result.hit_rate * 100.0);
     println!();
     
-    println!("RadixTarget:");
-    println!("  Insert time: {:.2}ms", radixtarget_result.insert_time_ms);
-    println!("  Lookup time: {:.2}ms", radixtarget_result.lookup_time_ms);
-    println!("  Operations/sec: {:.0}", radixtarget_result.ops_per_second);
-    println!("  Hit rate: {:.1}%", radixtarget_result.hit_rate * 100.0);
+    println!("### IPv6 Performance");
     println!();
-    
-    println!("ip_network_table:");
-    println!("  Insert time: {:.2}ms", ip_network_table_result.insert_time_ms);
-    println!("  Lookup time: {:.2}ms", ip_network_table_result.lookup_time_ms);
-    println!("  Operations/sec: {:.0}", ip_network_table_result.ops_per_second);
-    println!("  Hit rate: {:.1}%", ip_network_table_result.hit_rate * 100.0);
+    println!("| Library | Networks | Lookups | Insert Time (ms) | Lookup Time (ms) | Ops/sec | Hit Rate |");
+    println!("| ------- | -------- | ------- | ---------------- | ---------------- | ------- | -------- |");
+    println!("| RadixTarget | {} | {} | {:.2} | {:.2} | {:.0} | {:.1}% |", 
+             ipv6_networks.len(), ipv6_radixtarget_result.lookups,
+             ipv6_radixtarget_result.insert_time_ms, ipv6_radixtarget_result.lookup_time_ms,
+             ipv6_radixtarget_result.ops_per_second, ipv6_radixtarget_result.hit_rate * 100.0);
+    println!("| ip_network_table | {} | {} | {:.2} | {:.2} | {:.0} | {:.1}% |", 
+             ipv6_networks.len(), ipv6_ip_network_table_result.lookups,
+             ipv6_ip_network_table_result.insert_time_ms, ipv6_ip_network_table_result.lookup_time_ms,
+             ipv6_ip_network_table_result.ops_per_second, ipv6_ip_network_table_result.hit_rate * 100.0);
     println!();
     
     // Performance comparison
-    let insert_speedup = ip_network_table_result.insert_time_ms / radixtarget_result.insert_time_ms;
-    let lookup_speedup = ip_network_table_result.lookup_time_ms / radixtarget_result.lookup_time_ms;
-    let _ops_speedup = radixtarget_result.ops_per_second / ip_network_table_result.ops_per_second;
+    let ipv4_insert_speedup = ipv4_ip_network_table_result.insert_time_ms / ipv4_radixtarget_result.insert_time_ms;
+    let ipv4_lookup_speedup = ipv4_ip_network_table_result.lookup_time_ms / ipv4_radixtarget_result.lookup_time_ms;
+    let ipv6_insert_speedup = ipv6_ip_network_table_result.insert_time_ms / ipv6_radixtarget_result.insert_time_ms;
+    let ipv6_lookup_speedup = ipv6_ip_network_table_result.lookup_time_ms / ipv6_radixtarget_result.lookup_time_ms;
     
-    println!("Performance comparison (RadixTarget vs ip_network_table):");
-    if insert_speedup > 1.0 {
-        println!("  Insert: RadixTarget is {:.2}x faster", insert_speedup);
+    println!("### Performance Comparison");
+    println!();
+    println!("| IP Version | Operation | Winner | Speedup |");
+    println!("| ---------- | --------- | ------ | ------- |");
+
+    if ipv4_insert_speedup > 1.0 {
+        println!("| IPv4 | Insert | RadixTarget | {:.2}x faster |", ipv4_insert_speedup);
     } else {
-        println!("  Insert: ip_network_table is {:.2}x faster", 1.0 / insert_speedup);
+        println!("| IPv4 | Insert | ip_network_table | {:.2}x faster |", 1.0 / ipv4_insert_speedup);
     }
     
-    if lookup_speedup > 1.0 {
-        println!("  Lookup: RadixTarget is {:.2}x faster", lookup_speedup);
+    if ipv4_lookup_speedup > 1.0 {
+        println!("| IPv4 | Lookup | RadixTarget | {:.2}x faster |", ipv4_lookup_speedup);
     } else {
-        println!("  Lookup: ip_network_table is {:.2}x faster", 1.0 / lookup_speedup);
+        println!("| IPv4 | Lookup | ip_network_table | {:.2}x faster |", 1.0 / ipv4_lookup_speedup);
     }
+    
+    if ipv6_insert_speedup > 1.0 {
+        println!("| IPv6 | Insert | RadixTarget | {:.2}x faster |", ipv6_insert_speedup);
+    } else {
+        println!("| IPv6 | Insert | ip_network_table | {:.2}x faster |", 1.0 / ipv6_insert_speedup);
+    }
+    
+    if ipv6_lookup_speedup > 1.0 {
+        println!("| IPv6 | Lookup | RadixTarget | {:.2}x faster |", ipv6_lookup_speedup);
+    } else {
+        println!("| IPv6 | Lookup | ip_network_table | {:.2}x faster |", 1.0 / ipv6_lookup_speedup);
+    }
+    println!();
     
     // Save results
-    let results = vec![radixtarget_result, ip_network_table_result];
+    let results = vec![
+        ipv4_radixtarget_result, 
+        ipv4_ip_network_table_result,
+        ipv6_radixtarget_result,
+        ipv6_ip_network_table_result
+    ];
     if let Ok(json) = serde_json::to_string_pretty(&results) {
         std::fs::write("benchmark_results.json", json).unwrap();
-        println!("\nResults saved to benchmark_results.json");
+        println!("*Results saved to benchmark_results.json*");
     }
 }
