@@ -1,4 +1,4 @@
-use radixtarget_rust::{dns::ScopeMode, target::RadixTarget};
+use radixtarget::{RadixTarget, ScopeMode};
 use std::collections::HashSet;
 
 #[test]

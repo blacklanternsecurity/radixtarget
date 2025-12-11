@@ -7,8 +7,8 @@ pub mod node;
 pub mod target;
 pub mod utils;
 
-use dns::ScopeMode;
-use target::RadixTarget;
+pub use dns::ScopeMode;
+pub use target::RadixTarget;
 use utils::host_size_key;
 
 #[pyclass]

@@ -51,36 +51,21 @@ class RadixTarget:
 
     def add(self, value, data=None):
         """
-        Add a value, another RadixTarget, or a list of values.
-
-        Args:
-            value: Can be a string, another RadixTarget, or a list of strings
-            data: Optional data to associate (only used for single string values)
-
-        Returns:
-            str, list of str, or None: Canonical form(s) of inserted value(s)
+        Alias for insert()
         """
-        # Handle different input types
-        if isinstance(value, RadixTarget):
-            # Merge another target into this one
-            results = []
-            for host in value:
-                host_str = str(host)
-                canonical = self.insert(host_str, value.get(host_str))
-                if canonical is not None:
-                    results.append(canonical)
-            return results
-        elif isinstance(value, (list, tuple, set)):
-            # Add multiple values
-            results = []
-            for item in value:
-                canonical = self.insert(str(item), data)
-                if canonical is not None:
-                    results.append(canonical)
-            return results
-        else:
-            # Single value
-            return self.insert(value, data=data)
+        return self.insert(value, data=data)
+    
+    def merge(self, other):
+        """
+        Merge another RadixTarget into this one.
+        """
+        results = []
+        for host in other:
+            host_str = str(host)
+            canonical = self.insert(host_str, other.get(host_str))
+            if canonical is not None:
+                results.append(canonical)
+        return results
 
     def put(self, value, data=None):
         """Alias for insert()"""

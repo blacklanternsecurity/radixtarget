@@ -1,0 +1,119 @@
+name: Benchmark
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Build benchmark binary
+        run: cd benchmark && cargo build --release --bin benchmark
+
+      - name: Run benchmark
+        run: cd benchmark && ./target/release/benchmark > ../benchmark_report.md
+
+      - name: Display benchmark results
+        run: cat benchmark_report.md
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: benchmark-results
+          path: |
+            benchmark_report.md
+            benchmark_results.json
+          retention-days: 30
+
+      - name: Comment benchmark results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const report = fs.readFileSync('benchmark_report.md', 'utf8');
+              
+              // Find existing benchmark comment
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              });
+              
+              console.log(`Found ${comments.data.length} comments on this PR`);
+              
+              const existingComments = comments.data.filter(comment => 
+                comment.body.includes('RadixTarget Benchmark Results') &&
+                comment.user.login === 'github-actions[bot]'
+              );
+              
+              console.log(`Found ${existingComments.length} existing benchmark comments`);
+              
+              if (existingComments.length > 0) {
+                // Update most recent comment
+                const sortedComments = existingComments.sort((a, b) => 
+                  new Date(b.created_at) - new Date(a.created_at)
+                );
+                
+                const mostRecentComment = sortedComments[0];
+                console.log(`Updating benchmark comment: ${mostRecentComment.id}`);
+                
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: mostRecentComment.id,
+                  body: report
+                });
+                
+                // Delete older duplicates
+                for (let i = 1; i < sortedComments.length; i++) {
+                  try {
+                    await github.rest.issues.deleteComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      comment_id: sortedComments[i].id
+                    });
+                    console.log(`Deleted duplicate comment: ${sortedComments[i].id}`);
+                  } catch (error) {
+                    console.error(`Failed to delete comment: ${error.message}`);
+                  }
+                }
+              } else {
+                // Create new comment
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: report
+                });
+                console.log('Created new benchmark comment');
+              }
+            } catch (error) {
+              console.error('Failed to post benchmark results:', error);
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  '## RadixTarget Benchmark Results',
+                  '',
+                  '> ⚠️ **Failed to generate benchmark results**',
+                  '> ',
+                  `> Please check the [workflow logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
+                ].join('\n')
+              });
+            }
