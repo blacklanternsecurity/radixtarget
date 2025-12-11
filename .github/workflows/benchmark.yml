@@ -17,10 +17,10 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Build benchmark binary
-        run: cargo build --release --bin benchmark
+        run: cd benchmark && cargo build --release --bin benchmark
 
       - name: Run benchmark
-        run: ./target/release/benchmark > benchmark_report.md
+        run: cd benchmark && ./target/release/benchmark > ../benchmark_report.md
 
       - name: Display benchmark results
         run: cat benchmark_report.md
