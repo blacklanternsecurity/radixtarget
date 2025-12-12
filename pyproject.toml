@@ -1,6 +1,10 @@
 [project]
 name = "radixtarget"
+<<<<<<< Updated upstream
 version = "4.0.1"
+=======
+version = "4.0.4"
+>>>>>>> Stashed changes
 description = "Fast radix tree for IP addresses and DNS names"
 authors = [{name = "TheTechromancer"}]
 license = {text = "GPL-3.0"}

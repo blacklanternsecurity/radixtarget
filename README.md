@@ -51,7 +51,25 @@ rt.get("example.com") # None
 # Custom data nodes
 rt.add("evilcorp.co.uk", "custom_data")
 rt.get("www.evilcorp.co.uk") # "custom_data"
+
+# Insertion returns unique identifier
+insertion_id = rt.insert("10.0.0.1/8")
+assert insertion_id == "10.0.0.0/8"
+
+# Store custom data with any entry
+rt.insert("example.org", data={"tags": ["production"], "priority": 1})
+result = rt.get("api.example.org")
+# result contains your custom data: {"tags": ["production"], "priority": 1}
 ```
+
+## API Differences: Python vs Rust
+
+Both APIs provide an `insert()` method that returns a unique string identifier for each entry (a normalized version of the hostname or IP address). However, the Python API includes additional functionality:
+
+- **Rust**: `insert()` returns a string that uniquely identifies the insertion
+- **Python**: `insert()` also returns this unique identifier string, but additionally supports a `data=` parameter that allows you to store custom data of any Python type alongside the entry. When you later call `get()`, it returns your custom data instead of just the matched target string.
+
+This makes the Python API more flexible for applications that need to associate metadata with targets, while the Rust API focuses on pure performance for lookups.
 
 ## Rust
 
