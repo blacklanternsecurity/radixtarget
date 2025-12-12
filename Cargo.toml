@@ -1,6 +1,6 @@
 [package]
 name = "radixtarget"
-version = "4.0.3"
+version = "4.0.4"
 edition = "2024"
 description = "Fast radix tree implementation for IP addresses and hostnames with target matching"
 license = "GPL-3.0"
@@ -16,7 +16,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 idna = "1.0.3"
 ipnet = "2.10"
-pyo3 = { version = "0.26", features = ["extension-module"] }
+pyo3 = { version = "0.27", features = ["extension-module"] }
 seahash = "4.1"
 
 [dev-dependencies]
