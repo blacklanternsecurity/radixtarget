@@ -1,6 +1,3 @@
-use pyo3::prelude::*;
-use pyo3::types::PyList;
-
 pub mod dns;
 pub mod ip;
 pub mod node;
@@ -9,13 +6,21 @@ pub mod utils;
 
 pub use dns::ScopeMode;
 pub use target::RadixTarget;
+
+#[cfg(feature = "py")]
+use pyo3::prelude::*;
+#[cfg(feature = "py")]
+use pyo3::types::PyList;
+#[cfg(feature = "py")]
 use utils::host_size_key;
 
+#[cfg(feature = "py")]
 #[pyclass]
 struct PyRadixTarget {
     inner: RadixTarget,
 }
 
+#[cfg(feature = "py")]
 #[pymethods]
 impl PyRadixTarget {
     #[new]
@@ -124,12 +129,14 @@ impl PyRadixTarget {
     }
 }
 
+#[cfg(feature = "py")]
 #[pyclass]
 struct PyRadixTargetIterator {
     hosts: Vec<String>,
     index: usize,
 }
 
+#[cfg(feature = "py")]
 #[pymethods]
 impl PyRadixTargetIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -148,6 +155,7 @@ impl PyRadixTargetIterator {
 }
 
 /// PyO3 wrapper for the host_size_key function
+#[cfg(feature = "py")]
 #[pyfunction]
 fn py_host_size_key(host: &Bound<'_, pyo3::PyAny>) -> PyResult<(i64, String)> {
     // Convert the input to string - this handles both str and ipaddress objects
@@ -155,6 +163,7 @@ fn py_host_size_key(host: &Bound<'_, pyo3::PyAny>) -> PyResult<(i64, String)> {
     Ok(host_size_key(&host_str))
 }
 
+#[cfg(feature = "py")]
 #[pymodule]
 fn _radixtarget(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRadixTarget>()?;
