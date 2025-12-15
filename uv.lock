@@ -348,7 +348,7 @@ wheels = [
 
 [[package]]
 name = "radixtarget"
-version = "4.0.4"
+version = "4.1.0"
 source = { editable = "." }
 
 [package.dev-dependencies]

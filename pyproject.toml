@@ -1,6 +1,6 @@
 [project]
 name = "radixtarget"
-version = "4.0.4"
+version = "4.1.0"
 description = "Fast radix tree for IP addresses and DNS names"
 authors = [{name = "TheTechromancer"}]
 license = {text = "GPL-3.0"}
@@ -34,6 +34,8 @@ build-backend = "maturin"
 
 [tool.maturin]
 module-name = "radixtarget._radixtarget"
+no-default-features = true
+features = ["py"]
 
 [tool.ruff]
 line-length = 119
