@@ -64,6 +64,12 @@ rt.get("www.evilcorp.co.uk") # "custom_data"
 insertion_id = rt.insert("10.0.0.1/8")
 assert insertion_id == "10.0.0.0/8"
 
+# insert() raises ValueError for invalid input
+try:
+    rt.insert("http://example.com")
+except ValueError:
+    pass  # Invalid characters in hostname
+
 # Store custom data with any entry
 rt.insert("example.org", data={"tags": ["production"], "priority": 1})
 result = rt.get("api.example.org")
@@ -100,6 +106,10 @@ let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
 rt.insert("192.168.1.0/24"); 
 assert_eq!(rt.get("192.168.1.100"), Some("192.168.1.0/24".to_string()));
 assert_eq!(rt.get("192.168.2.100"), None);
+
+// insert() returns Result - Ok with normalized identifier or Err for invalid input
+assert!(rt.insert("10.0.0.0/8").is_ok());
+assert!(rt.insert("http://example.com").is_err());
 
 // IPv6 networks and addresses  
 rt.insert("dead::/64");
@@ -175,4 +185,29 @@ let rt = RadixTarget::new(&hosts, ScopeMode::Normal);
 assert!(rt.contains("192.168.1.100"));
 assert!(rt.contains("subdomain.example.com"));
 assert!(rt.contains("dead::beef"));
+```
+
+## Development
+
+### Running Tests
+
+```bash
+# Rust tests
+cargo test --verbose --all-features
+
+# Python tests
+uv run pytest
+```
+
+### Linting
+
+```bash
+# Run clippy
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Check formatting
+cargo fmt --all -- --check
+
+# Python linting
+uv run ruff check && uv run ruff format
 ```

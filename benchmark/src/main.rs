@@ -148,10 +148,10 @@ fn generate_ipv6_lookup_ips(lookup_count: usize) -> Vec<String> {
 
 fn benchmark_radixtarget_insert(networks: &[String], ip_version: &str) -> InsertBenchmarkResult {
     let start = Instant::now();
-    let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+    let mut rt = RadixTarget::new(&[], ScopeMode::Normal).expect("Failed to create RadixTarget");
 
     for network in networks {
-        rt.insert(network);
+        let _ = rt.insert(network);
     }
 
     let insert_time = start.elapsed();
@@ -172,9 +172,9 @@ fn benchmark_radixtarget_lookup(
     ip_version: &str,
 ) -> LookupBenchmarkResult {
     // First build the radix tree
-    let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+    let mut rt = RadixTarget::new(&[], ScopeMode::Normal).expect("Failed to create RadixTarget");
     for network in networks {
-        rt.insert(network);
+        let _ = rt.insert(network);
     }
 
     // Benchmark lookups
@@ -300,9 +300,9 @@ fn accuracy_test() -> bool {
     ];
 
     // Test RadixTarget
-    let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+    let mut rt = RadixTarget::new(&[], ScopeMode::Normal).expect("Failed to create RadixTarget");
     for network in &test_networks {
-        rt.insert(network);
+        let _ = rt.insert(network);
     }
 
     // Test ip_network_table

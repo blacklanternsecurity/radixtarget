@@ -112,7 +112,7 @@ impl IpRadixTree {
                 new.insert(supernet.to_string());
                 self.delete(left_net);
                 self.delete(right_net);
-                self.insert(supernet);
+                let _ = self.insert(supernet);
             }
         }
         // Remove any overlap between cleaned and new
@@ -757,8 +757,8 @@ mod tests {
         let net1 = IpNet::from_str("192.168.0.0/24").unwrap();
         let net2 = IpNet::from_str("192.168.1.0/24").unwrap();
         let supernet = IpNet::from_str("192.168.0.0/23").unwrap();
-        tree.insert(net1);
-        tree.insert(net2);
+        let _ = tree.insert(net1);
+        let _ = tree.insert(net2);
         // Before defrag, lookups should return the /24s
         let ip1 = IpNet::from_str("192.168.0.1/32").unwrap();
         let ip2 = IpNet::from_str("192.168.1.1/32").unwrap();
@@ -802,7 +802,7 @@ mod tests {
 
         for net_str in &networks {
             let net = IpNet::from_str(net_str).unwrap();
-            tree.insert(net);
+            let _ = tree.insert(net);
         }
 
         // Verify all networks are present
@@ -946,9 +946,9 @@ mod tests {
         let child2 = IpNet::from_str("192.168.2.0/24").unwrap();
         let child3 = IpNet::from_str("192.168.3.0/24").unwrap();
 
-        tree.insert(child1);
-        tree.insert(child2);
-        tree.insert(child3);
+        let _ = tree.insert(child1);
+        let _ = tree.insert(child2);
+        let _ = tree.insert(child3);
 
         // Verify children are accessible
         assert_eq!(tree.get(&child1), Some("192.168.1.0/24".to_string()));
@@ -972,8 +972,8 @@ mod tests {
         let child_v6_1 = IpNet::from_str("2001:db8:abcd::/48").unwrap();
         let child_v6_2 = IpNet::from_str("2001:db8:beef::/48").unwrap();
 
-        tree.insert(child_v6_1);
-        tree.insert(child_v6_2);
+        let _ = tree.insert(child_v6_1);
+        let _ = tree.insert(child_v6_2);
 
         assert_eq!(
             tree.get(&child_v6_1),
