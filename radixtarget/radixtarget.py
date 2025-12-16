@@ -45,7 +45,7 @@ class RadixTarget:
         if canonical_value is not None:
             # Store data using canonical value as key - default to the canonical form itself
             data_to_store = data if data is not None else canonical_value
-            self._data[canonical_value] = data_to_store
+            self._data[hash(canonical_value)] = data_to_store
 
         return canonical_value
 
@@ -83,7 +83,7 @@ class RadixTarget:
         """
         canonical_value = self._rust_target.get(value)
         if canonical_value is not None:
-            return self._data.get(canonical_value)
+            return self._data.get(hash(canonical_value))
         return None
 
     def search(self, value):
@@ -103,7 +103,7 @@ class RadixTarget:
         # Get canonical value before deleting to remove associated data
         canonical_value = self._rust_target.get(value)
         if canonical_value is not None:
-            self._data.pop(canonical_value, None)
+            self._data.pop(hash(canonical_value), None)
 
         return self._rust_target.delete(value)
 
