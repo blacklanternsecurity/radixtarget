@@ -36,8 +36,8 @@ impl PyRadixTarget {
                 ));
             }
         };
-        let mut inner = RadixTarget::new(&[], scope_mode)
-            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        let mut inner =
+            RadixTarget::new(&[], scope_mode).map_err(pyo3::exceptions::PyValueError::new_err)?;
         if let Some(hosts_list) = hosts {
             for host in hosts_list.iter() {
                 inner
