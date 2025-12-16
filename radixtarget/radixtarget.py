@@ -54,7 +54,7 @@ class RadixTarget:
         Alias for insert()
         """
         return self.insert(value, data=data)
-    
+
     def merge(self, other):
         """
         Merge another RadixTarget into this one.

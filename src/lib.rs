@@ -36,17 +36,22 @@ impl PyRadixTarget {
                 ));
             }
         };
-        let mut inner = RadixTarget::new(&[], scope_mode);
+        let mut inner = RadixTarget::new(&[], scope_mode)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
         if let Some(hosts_list) = hosts {
             for host in hosts_list.iter() {
-                inner.insert(&host.extract::<String>()?);
+                inner
+                    .insert(&host.extract::<String>()?)
+                    .map_err(pyo3::exceptions::PyValueError::new_err)?;
             }
         }
         Ok(PyRadixTarget { inner })
     }
 
-    fn insert(&mut self, value: &str) -> Option<String> {
-        self.inner.insert(value)
+    fn insert(&mut self, value: &str) -> PyResult<Option<String>> {
+        self.inner
+            .insert(value)
+            .map_err(pyo3::exceptions::PyValueError::new_err)
     }
 
     fn len(&self) -> usize {
@@ -160,7 +165,7 @@ impl PyRadixTargetIterator {
 fn py_host_size_key(host: &Bound<'_, pyo3::PyAny>) -> PyResult<(i64, String)> {
     // Convert the input to string - this handles both str and ipaddress objects
     let host_str = host.str()?.to_string();
-    Ok(host_size_key(&host_str))
+    host_size_key(&host_str).map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
 #[cfg(feature = "py")]
