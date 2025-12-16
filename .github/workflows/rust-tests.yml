@@ -2,7 +2,7 @@ name: Rust tests
 
 on:
   push:
-    branches: [ master ]
+    branches: [ stable ]
   pull_request:
 
 jobs:
@@ -42,7 +42,7 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     
     steps:
       - uses: actions/checkout@v6

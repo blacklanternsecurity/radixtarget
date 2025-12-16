@@ -3,7 +3,7 @@ name: Python tests
 on:
   push:
     branches:
-      - master
+      - stable
   pull_request:
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python
@@ -56,16 +56,14 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
       - name: Build PyPi package
-        if: github.ref == 'refs/heads/master'
         run: uv run maturin build --release --out dist
       - name: Publish PyPi package
-        if: github.ref == 'refs/heads/master'
         run: uv run maturin publish --username __token__ --password ${{ secrets.PYPI_TOKEN }}
 
   linux:
     runs-on: ${{ matrix.platform.runner }}
     needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     strategy:
       matrix:
         platform:
@@ -102,7 +100,7 @@ jobs:
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
     needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     strategy:
       matrix:
         platform:
@@ -135,7 +133,7 @@ jobs:
   windows:
     runs-on: ${{ matrix.platform.runner }}
     needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     strategy:
       matrix:
         platform:
@@ -164,7 +162,7 @@ jobs:
   macos:
     runs-on: ${{ matrix.platform.runner }}
     needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     strategy:
       matrix:
         platform:
@@ -192,7 +190,7 @@ jobs:
   sdist:
     runs-on: ubuntu-latest
     needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     steps:
       - uses: actions/checkout@v6
       - name: Build sdist
@@ -210,7 +208,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     needs: [linux, musllinux, windows, macos, sdist]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     permissions:
       # Use to sign the release artifacts
       id-token: write
