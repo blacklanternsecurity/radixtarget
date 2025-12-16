@@ -4,17 +4,17 @@
 [![PyPI](https://img.shields.io/pypi/v/radixtarget)](https://pypi.org/project/radixtarget/)
 [![Rust Version](https://img.shields.io/badge/rust-1.70+-orange)](https://www.rust-lang.org)
 [![Crates.io](https://img.shields.io/crates/v/radixtarget?color=orange)](https://crates.io/crates/radixtarget)
-[![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/stable/LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Rust Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml/badge.svg?branch=master)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml)
-[![Python Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml/badge.svg?branch=master)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml)
+[![Rust Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml/badge.svg?branch=stable)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml)
+[![Python Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml/badge.svg?branch=stable)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml)
 [![Codecov](https://codecov.io/gh/blacklanternsecurity/radixtarget/graph/badge.svg?token=7IPWMYMTGZ)](https://codecov.io/gh/blacklanternsecurity/radixtarget)
 
 RadixTarget is a performant radix implementation designed for quick lookups of IP addresses/networks and DNS hostnames. 
 
 RadixTarget is:
 - Written in Rust with Python bindings
-- Capable of ~200,000 lookups per second regardless of database size
+- Capable of ~1,000,000 lookups per second regardless of database size
 - 100% test coverage
 - Available as both a Rust crate and Python package
 - Used by:
