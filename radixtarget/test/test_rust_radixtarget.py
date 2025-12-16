@@ -1,6 +1,7 @@
 import random
 import ipaddress
 import time
+import pytest
 from pathlib import Path
 from radixtarget import RadixTarget
 
@@ -724,6 +725,8 @@ def test_target_merging():
     hosts6 = sorted([str(h) for h in target6])
     hosts9 = sorted([str(h) for h in target9])
     assert hosts6 == hosts9
+    assert hosts6 == ["10.0.0.0/8", "192.168.1.0/24", "first.com", "second.com"]
+    assert hosts9 == ["10.0.0.0/8", "192.168.1.0/24", "first.com", "second.com"]
 
     print("✓ All target merging tests passed!")
 
@@ -828,37 +831,15 @@ def test_error_handling():
 
     target = RadixTarget()
 
-    # Test that the current implementation accepts various formats
-    # (validation may be added in future versions)
-
-    # These currently work but might be invalid in strict validation:
-    potentially_invalid = [
+    invalid_inputs = [
         "http://example.com",  # URL with protocol
         "example.com:80",  # Domain with port
         "192.168.1.1:80",  # IP with port
     ]
 
-    validation_working = []
-    validation_missing = []
-
-    for test_input in potentially_invalid:
-        target.add(test_input)
-        validation_missing.append(test_input)
-        print(f"⚠️  No validation for: {test_input}")
-
-    # Test basic functionality still works
-    target2 = RadixTarget()
-    target2.add("example.com")
-    target2.add("192.168.1.0/24")
-    target2.add("8.8.8.8")
-
-    assert "example.com" in target2
-    assert "192.168.1.100" in target2
-    assert "8.8.8.8" in target2
-
-    print(
-        f"✓ Error handling test passed - {len(validation_working)} validations working, {len(validation_missing)} may need implementation"
-    )
+    for test_input in invalid_inputs:
+        with pytest.raises(ValueError):
+            target.add(test_input)
 
 
 def test_radixtarget_benchmark():
