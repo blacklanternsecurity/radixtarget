@@ -196,7 +196,7 @@ assert!(rt.contains("dead::beef"));
 cargo test --verbose --all-features
 
 # Python tests
-pytest
+uv run pytest
 ```
 
 ### Linting
@@ -209,5 +209,5 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
 
 # Python linting
-ruff check .
+uv run ruff check && uv run ruff format
 ```
