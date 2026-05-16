@@ -1,10 +1,12 @@
 pub mod dns;
+mod input;
 pub mod ip;
 pub mod node;
 pub mod target;
 pub mod utils;
 
 pub use dns::ScopeMode;
+pub use input::RadixTargetInput;
 pub use target::RadixTarget;
 
 #[cfg(feature = "py")]
@@ -41,7 +43,7 @@ impl PyRadixTarget {
         if let Some(hosts_list) = hosts {
             for host in hosts_list.iter() {
                 inner
-                    .insert(&host.extract::<String>()?)
+                    .insert(host.extract::<String>()?.as_str())
                     .map_err(pyo3::exceptions::PyValueError::new_err)?;
             }
         }
