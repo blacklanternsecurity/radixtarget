@@ -3,7 +3,7 @@ name = "radixtarget"
 version = "4.2.0"
 description = "Fast radix tree for IP addresses and DNS names"
 authors = [{name = "TheTechromancer"}]
-license = {text = "GPL-3.0"}
+license = {text = "AGPL-3.0"}
 readme = "README.md"
 requires-python = ">=3.9"
 keywords = ["radix", "tree", "ip", "dns", "networking"]
