@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   check:
-    uses: blacklanternsecurity/CLA/.github/workflows/release-check.yml@e532142ee9e7322888f6edc80d9a89e2f8c0d96d # 2026-10-03
+    uses: blacklanternsecurity/CLA/.github/workflows/release-check.yml@40c6e18c0a6e32116eea4f89fc826f53c70889dc # 2026-10-07
 
   rust:
     needs: check
@@ -202,7 +202,7 @@ jobs:
     needs: [check, crates, pypi]
     permissions:
       contents: write
-    uses: blacklanternsecurity/CLA/.github/workflows/publish.yml@e532142ee9e7322888f6edc80d9a89e2f8c0d96d # 2026-10-03
+    uses: blacklanternsecurity/CLA/.github/workflows/publish.yml@40c6e18c0a6e32116eea4f89fc826f53c70889dc # 2026-10-07
     with:
       version: ${{ needs.check.outputs.version }}
       prerelease: ${{ needs.check.outputs.prerelease }}
