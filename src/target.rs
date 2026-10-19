@@ -1,9 +1,8 @@
 use crate::dns::{DnsRadixTree, ScopeMode};
+use crate::input::{ParsedInput, RadixTargetInput};
 use crate::ip::IpRadixTree;
-use crate::utils::normalize_dns;
 use ipnet::IpNet;
 use std::collections::HashSet;
-use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
@@ -11,9 +10,8 @@ pub struct RadixTarget {
     dns: DnsRadixTree,
     ipv4: IpRadixTree,
     ipv6: IpRadixTree,
-    hosts: HashSet<String>, // store canonicalized hosts for len/contains
-    cached_hash: Arc<Mutex<Option<u64>>>, // cached hash value
-    scope_mode: ScopeMode,  // needed for hash calculation
+    cached_hash: Arc<Mutex<Option<u64>>>,
+    scope_mode: ScopeMode,
 }
 
 impl RadixTarget {
@@ -24,7 +22,6 @@ impl RadixTarget {
             dns,
             ipv4: IpRadixTree::new(acl_mode),
             ipv6: IpRadixTree::new(acl_mode),
-            hosts: HashSet::new(),
             cached_hash: Arc::new(Mutex::new(None)),
             scope_mode,
         };
@@ -35,31 +32,16 @@ impl RadixTarget {
     }
 
     /// Insert a target (IP network, IP address, or DNS name). Returns the canonicalized value.
-    pub fn insert(&mut self, value: &str) -> Result<Option<String>, String> {
+    pub fn insert<T: RadixTargetInput>(&mut self, value: T) -> Result<Option<String>, String> {
         // Invalidate cached hash
         *self.cached_hash.lock().unwrap() = None;
 
-        // Hosts are now tracked directly in the trees, no need to maintain separate set
-        if let Ok(ipnet) = value.parse::<IpNet>() {
-            match ipnet {
-                IpNet::V4(_) => Ok(self.ipv4.insert(ipnet)),
-                IpNet::V6(_) => Ok(self.ipv6.insert(ipnet)),
-            }
-        } else if let Ok(ipaddr) = value.parse::<IpAddr>() {
-            // Convert bare IP address to /32 or /128 network for both storage and return
-            match ipaddr {
-                IpAddr::V4(addr) => {
-                    let net = IpNet::V4(ipnet::Ipv4Net::new(addr, 32).unwrap());
-                    Ok(self.ipv4.insert(net))
-                }
-                IpAddr::V6(addr) => {
-                    let net = IpNet::V6(ipnet::Ipv6Net::new(addr, 128).unwrap());
-                    Ok(self.ipv6.insert(net))
-                }
-            }
-        } else {
-            let canonical = normalize_dns(value)?;
-            Ok(self.dns.insert(&canonical))
+        match value.into_parsed()? {
+            ParsedInput::Ip(net) => match net {
+                IpNet::V4(_) => Ok(self.ipv4.insert(net)),
+                IpNet::V6(_) => Ok(self.ipv6.insert(net)),
+            },
+            ParsedInput::Dns(canonical) => Ok(self.dns.insert(&canonical)),
         }
     }
 
@@ -75,94 +57,44 @@ impl RadixTarget {
         self.hosts().is_empty()
     }
 
-    pub fn contains(&self, value: &str) -> bool {
-        if let Ok(ipnet) = value.parse::<IpNet>() {
-            match ipnet {
-                IpNet::V4(_) => self.ipv4.get(&ipnet).is_some(),
-                IpNet::V6(_) => self.ipv6.get(&ipnet).is_some(),
-            }
-        } else if let Ok(ipaddr) = value.parse::<IpAddr>() {
-            match ipaddr {
-                IpAddr::V4(addr) => self
-                    .ipv4
-                    .get(&IpNet::V4(ipnet::Ipv4Net::new(addr, 32).unwrap()))
-                    .is_some(),
-                IpAddr::V6(addr) => self
-                    .ipv6
-                    .get(&IpNet::V6(ipnet::Ipv6Net::new(addr, 128).unwrap()))
-                    .is_some(),
-            }
-        } else {
-            // Invalid DNS names are not contained
-            normalize_dns(value)
-                .ok()
-                .and_then(|canonical| self.dns.get(&canonical))
-                .is_some()
+    pub fn contains<T: RadixTargetInput>(&self, value: T) -> bool {
+        match value.into_parsed() {
+            Ok(ParsedInput::Ip(net)) => match net {
+                IpNet::V4(_) => self.ipv4.get(&net).is_some(),
+                IpNet::V6(_) => self.ipv6.get(&net).is_some(),
+            },
+            Ok(ParsedInput::Dns(canonical)) => self.dns.get(&canonical).is_some(),
+            Err(_) => false,
         }
     }
 
     pub fn contains_target(&self, other: &Self) -> bool {
-        other.hosts().iter().all(|host| self.contains(host))
+        other.hosts().iter().all(|host| self.contains(host.as_str()))
     }
 
     /// Delete a target (IP network, IP address, or DNS name). Returns true if deleted.
-    pub fn delete(&mut self, value: &str) -> bool {
+    pub fn delete<T: RadixTargetInput>(&mut self, value: T) -> bool {
         // Invalidate cached hash
         *self.cached_hash.lock().unwrap() = None;
 
-        let deleted = if let Ok(ipnet) = value.parse::<IpNet>() {
-            match ipnet {
-                IpNet::V4(_) => self.ipv4.delete(ipnet),
-                IpNet::V6(_) => self.ipv6.delete(ipnet),
-            }
-        } else if let Ok(ipaddr) = value.parse::<IpAddr>() {
-            match ipaddr {
-                IpAddr::V4(addr) => self
-                    .ipv4
-                    .delete(IpNet::V4(ipnet::Ipv4Net::new(addr, 32).unwrap())),
-                IpAddr::V6(addr) => self
-                    .ipv6
-                    .delete(IpNet::V6(ipnet::Ipv6Net::new(addr, 128).unwrap())),
-            }
-        } else {
-            // Invalid DNS names cannot be deleted (return false)
-            match normalize_dns(value) {
-                Ok(canonical) => self.dns.delete(&canonical),
-                Err(_) => false,
-            }
-        };
-        // Remove the canonical form from hosts, not the original input
-        if deleted && value.parse::<IpNet>().is_err() && value.parse::<IpAddr>().is_err() {
-            if let Ok(canonical) = normalize_dns(value) {
-                self.hosts.remove(&canonical);
-            }
-        } else {
-            self.hosts.remove(value);
+        match value.into_parsed() {
+            Ok(ParsedInput::Ip(net)) => match net {
+                IpNet::V4(_) => self.ipv4.delete(net),
+                IpNet::V6(_) => self.ipv6.delete(net),
+            },
+            Ok(ParsedInput::Dns(canonical)) => self.dns.delete(&canonical),
+            Err(_) => false,
         }
-        deleted
     }
 
     /// Get the most specific match for a target (IP network, IP address, or DNS name). Returns the canonical value if found.
-    pub fn get(&self, value: &str) -> Option<String> {
-        if let Ok(ipnet) = value.parse::<IpNet>() {
-            match ipnet {
-                IpNet::V4(_) => self.ipv4.get(&ipnet),
-                IpNet::V6(_) => self.ipv6.get(&ipnet),
-            }
-        } else if let Ok(ipaddr) = value.parse::<IpAddr>() {
-            match ipaddr {
-                IpAddr::V4(addr) => self
-                    .ipv4
-                    .get(&IpNet::V4(ipnet::Ipv4Net::new(addr, 32).unwrap())),
-                IpAddr::V6(addr) => self
-                    .ipv6
-                    .get(&IpNet::V6(ipnet::Ipv6Net::new(addr, 128).unwrap())),
-            }
-        } else {
-            // Invalid DNS names return None
-            normalize_dns(value)
-                .ok()
-                .and_then(|canonical| self.dns.get(&canonical))
+    pub fn get<T: RadixTargetInput>(&self, value: T) -> Option<String> {
+        match value.into_parsed().ok()? {
+            ParsedInput::Ip(net) => match net {
+                IpNet::V4(_) => self.ipv4.get(&net),
+                IpNet::V6(_) => self.ipv6.get(&net),
+            },
+            ParsedInput::Dns(canonical) => self.dns.get(&canonical),
         }
     }
 
@@ -286,6 +218,52 @@ mod tests {
         assert_eq!(host, Some("example.com".to_string()));
         assert_eq!(rt.get("example.com"), Some("example.com".to_string()));
         assert_eq!(rt.get("notfound.com"), None);
+    }
+
+    #[test]
+    fn test_ipaddr_input_get_v4_and_v6() {
+        use std::net::IpAddr;
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        rt.insert("8.8.8.0/24").unwrap();
+        rt.insert("dead::/64").unwrap();
+
+        let v4: IpAddr = "8.8.8.8".parse().unwrap();
+        let v6: IpAddr = "dead::beef".parse().unwrap();
+
+        assert_eq!(rt.get(v4), Some("8.8.8.0/24".to_string()));
+        assert_eq!(rt.get(v6), Some("dead::/64".to_string()));
+        assert_eq!(rt.get(v4), rt.get("8.8.8.8"));
+        assert_eq!(rt.get(v6), rt.get("dead::beef"));
+    }
+
+    #[test]
+    fn test_ipaddr_input_insert_contains_delete() {
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let v4 = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
+        let v6 = IpAddr::V6("dead::beef".parse::<Ipv6Addr>().unwrap());
+
+        assert_eq!(rt.insert(v4).unwrap(), Some("192.168.1.100/32".to_string()));
+        assert_eq!(rt.insert(v4).unwrap(), Some("192.168.1.100/32".to_string()));
+        assert_eq!(rt.insert(v6).unwrap(), Some("dead::beef/128".to_string()));
+        assert!(rt.contains(v4));
+        assert!(rt.contains(v6));
+        assert!(rt.contains("192.168.1.100"));
+        assert!(rt.delete(v4));
+        assert!(!rt.contains(v4));
+        assert!(!rt.delete(v4));
+        assert!(rt.delete(v6));
+        assert!(!rt.contains(v6));
+    }
+
+    #[test]
+    fn test_ipaddr_input_acl_mode() {
+        use std::net::{IpAddr, Ipv4Addr};
+        let mut rt = RadixTarget::new(&[], ScopeMode::Acl).unwrap();
+        rt.insert("10.0.0.0/24").unwrap();
+        let v4 = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5));
+        assert_eq!(rt.get(v4), Some("10.0.0.0/24".to_string()));
+        assert_eq!(rt.insert(v4).unwrap(), None);
     }
 
     #[test]
@@ -476,7 +454,7 @@ mod tests {
         ]
         .iter()
         {
-            target.insert(net).unwrap();
+            target.insert(*net).unwrap();
         }
         let expected_hosts: HashSet<String> = [
             "192.168.0.0/25",
@@ -536,7 +514,7 @@ mod tests {
         ]
         .iter()
         {
-            target.insert(net).unwrap();
+            target.insert(*net).unwrap();
         }
         let expected_hosts: HashSet<String> = [
             "dead:beef::/121",
@@ -633,10 +611,10 @@ mod tests {
         ];
         for input in malformed_inputs.iter() {
             // Should not panic, should insert as DNS fallback, or handle gracefully
-            let _ = rt.insert(input);
+            let _ = rt.insert(*input);
             // Should not be retrievable as a valid IP or network
             assert_eq!(
-                rt.get(input),
+                rt.get(*input),
                 rt.dns.get(input),
                 "Malformed input should only be in DNS tree: {}",
                 input
@@ -1347,7 +1325,7 @@ mod benchmarks {
         let start = Instant::now();
 
         for cidr in &cidrs {
-            let _ = rt.insert(cidr);
+            let _ = rt.insert(cidr.as_str());
         }
 
         let elapsed = start.elapsed();
@@ -1385,7 +1363,7 @@ mod benchmarks {
 
         // Insert all CIDRs first
         for cidr in &cidrs {
-            let _ = rt.insert(cidr);
+            let _ = rt.insert(cidr.as_str());
         }
 
         println!("✅ Loaded {} CIDR blocks", cidrs.len());
@@ -1413,7 +1391,7 @@ mod benchmarks {
         let mut misses = 0;
 
         for ip in &test_ips {
-            match rt.get(ip) {
+            match rt.get(ip.as_str()) {
                 Some(_) => hits += 1,
                 None => misses += 1,
             }
