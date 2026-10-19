@@ -16,7 +16,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 idna = "1.0.3"
 ipnet = "2.10"
-pyo3 = { version = "0.27", optional = true }
+pyo3 = { version = "0.30", optional = true }
 seahash = "4.1"
 
 [features]
