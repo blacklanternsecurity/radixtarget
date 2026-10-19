@@ -1,7 +1,8 @@
 import ipaddress
 from contextlib import suppress
 
-from radixtarget.helpers import network_to_bits, merge_subnets
+from radixtarget.helpers import merge_subnets, network_to_bits
+
 from radixtarget.tree.base import BaseRadixTree, RadixTreeNode, sentinel
 
 
@@ -120,9 +121,12 @@ class IPRadixTree(BaseRadixTree):
         for bit in network_bits:
             if bit in node.children:
                 node = node.children[bit]
-                if node.host and node.host.prefixlen <= query_network.prefixlen:
-                    if query_network.network_address in node.host:
-                        matched_node = node
+                if (
+                    node.host
+                    and node.host.prefixlen <= query_network.prefixlen
+                    and query_network.network_address in node.host
+                ):
+                    matched_node = node
             else:
                 break
 
