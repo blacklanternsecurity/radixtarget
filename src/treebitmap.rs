@@ -122,8 +122,9 @@ impl<T: Sized> TreeBitmap<T> {
         // note: we do not need to touch the external bits
     }
 
-    /// longest match lookup of ```nibbles```. Returns bits matched as u32, and reference to T.
-    pub fn longest_match(&self, nibbles: &[u8]) -> Option<(u32, &T)> {
+    /// longest match lookup of ```nibbles```, considering only prefixes no longer than
+    /// ```masklen```. Returns bits matched as u32, and reference to T.
+    pub fn longest_match(&self, nibbles: &[u8], masklen: u32) -> Option<(u32, &T)> {
         let mut cur_hdl = self.root_handle();
         let mut cur_index = 0;
         let mut bits_matched = 0;
@@ -132,7 +133,9 @@ impl<T: Sized> TreeBitmap<T> {
 
         for nibble in nibbles {
             let cur_node = *self.trienodes.get(&cur_hdl, cur_index);
-            let match_mask = node::MATCH_MASKS[*nibble as usize];
+            let remaining = masklen.saturating_sub(bits_searched);
+            let match_mask =
+                node::MATCH_MASKS[*nibble as usize] & PREFIX_LEN_MASKS[remaining.min(4) as usize];
 
             if let MatchResult::Match(result_hdl, result_index, matching_bit_index) =
                 cur_node.match_internal(match_mask)
@@ -142,7 +145,8 @@ impl<T: Sized> TreeBitmap<T> {
                 best_match = Some((result_hdl, result_index));
             }
 
-            if cur_node.is_endnode() {
+            // children only hold prefixes longer than this stride
+            if cur_node.is_endnode() || remaining < 4 {
                 break;
             }
             match cur_node.match_external(match_mask) {
@@ -353,6 +357,41 @@ impl<T: Sized> TreeBitmap<T> {
         }
     }
 
+    /// Collect every value in the subtree reached by following ```nibbles``` for at
+    /// most ```masklen / 4``` strides. This is a superset of the prefixes covered by
+    /// ```nibbles```/```masklen```; callers filter it.
+    pub fn subtree_values(&self, nibbles: &[u8], masklen: u32) -> Vec<&T> {
+        let mut cur_hdl = self.root_handle();
+        let mut cur_index = 0;
+        for nibble in nibbles.iter().take((masklen / 4) as usize) {
+            let cur_node = *self.trienodes.get(&cur_hdl, cur_index);
+            if cur_node.is_endnode() {
+                break;
+            }
+            match cur_node.match_external(node::MATCH_MASKS[*nibble as usize]) {
+                MatchResult::Chase(child_hdl, child_index) => {
+                    cur_hdl = child_hdl;
+                    cur_index = child_index;
+                }
+                _ => break,
+            }
+        }
+        let mut values = Vec::new();
+        self.collect_values(*self.trienodes.get(&cur_hdl, cur_index), &mut values);
+        values
+    }
+
+    fn collect_values<'a>(&'a self, node: Node, values: &mut Vec<&'a T>) {
+        let result_hdl = node.result_handle();
+        for i in 0..node.result_count() {
+            values.push(self.results.get(&result_hdl, i));
+        }
+        let child_hdl = node.child_handle();
+        for i in 0..node.child_count() {
+            self.collect_values(*self.trienodes.get(&child_hdl, i), values);
+        }
+    }
+
     pub fn iter(&self) -> TreeBitmapIter<'_, T> {
         let root_hdl = self.root_handle();
         let root_node = *self.trienodes.get(&root_hdl, 0);
@@ -378,6 +417,16 @@ pub struct TreeBitmapIter<'a, T: 'a> {
     path: Vec<PathElem>,
     nibbles: Vec<u8>,
 }
+
+/// Internal bitmap positions holding prefixes of at most N bits within a stride,
+/// indexed by N (0-4). See the bit layout on ```Node```.
+static PREFIX_LEN_MASKS: [u32; 5] = [
+    0x8000_0000, // *
+    0xe000_0000, // up to 1 bit
+    0xfe00_0000, // up to 2 bits
+    0xfffe_0000, // up to 3 bits
+    0xffff_ffff, // up to 4 bits, plus child pointers
+];
 
 #[rustfmt::skip]
 static PREFIX_OF_BIT: [u8; 32] = [// 0       1       2      3        4       5       6       7
@@ -496,12 +545,24 @@ impl FastTreeBitmap {
 
     pub fn longest_match(&self, network: &IpNet) -> Option<&IpNet> {
         let canonical = crate::utils::canonicalize_ipnet(network);
-        let (nibbles, _) = ipnet_to_nibbles(&canonical);
+        let (nibbles, masklen) = ipnet_to_nibbles(&canonical);
 
-        match self.tree.longest_match(&nibbles) {
+        match self.tree.longest_match(&nibbles, masklen) {
             Some((_, result)) => Some(result),
             None => None,
         }
+    }
+
+    /// Stored networks strictly inside ```network```.
+    pub fn covered_by(&self, network: &IpNet) -> Vec<IpNet> {
+        let canonical = crate::utils::canonicalize_ipnet(network);
+        let (nibbles, masklen) = ipnet_to_nibbles(&canonical);
+        self.tree
+            .subtree_values(&nibbles, masklen)
+            .into_iter()
+            .filter(|n| **n != canonical && canonical.contains(*n))
+            .copied()
+            .collect()
     }
 
     pub fn exact_match(&self, network: &IpNet) -> Option<&IpNet> {

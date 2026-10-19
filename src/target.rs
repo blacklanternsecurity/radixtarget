@@ -9,10 +9,10 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone, Debug)]
 pub struct RadixTarget {
     dns: DnsRadixTree,
-    ip_tree: FastIpRadixTree, // Single tree for both IPv4 and IPv6
-    hosts: HashSet<String>,   // store canonicalized hosts for len/contains
+    ip_tree: FastIpRadixTree,
+    hosts: HashSet<String>, // store canonicalized hosts for len/contains
     cached_hash: Arc<Mutex<Option<u64>>>, // cached hash value
-    scope_mode: ScopeMode,    // needed for hash calculation
+    scope_mode: ScopeMode,  // needed for hash calculation
 }
 
 impl RadixTarget {
