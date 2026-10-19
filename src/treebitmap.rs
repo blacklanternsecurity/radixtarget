@@ -2,6 +2,8 @@
 // Based on the Tree-bitmap algorithm by W. Eatherton, Z. Dittia, G. Varghes
 // Provides O(log n) operations with efficient memory usage
 
+#![forbid(unsafe_code)]
+
 use ipnet::IpNet;
 use std::cmp;
 
@@ -50,10 +52,9 @@ struct TreeBitmap<T: Sized> {
     trienodes: Allocator<Node>,
     results: Allocator<T>,
     len: usize,
-    should_drop: bool,
 }
 
-impl<T: Sized> TreeBitmap<T> {
+impl<T: Copy + Default> TreeBitmap<T> {
     /// Returns TreeBitmap with 0 start capacity.
     pub fn new() -> Self {
         Self::with_capacity(0)
@@ -69,7 +70,6 @@ impl<T: Sized> TreeBitmap<T> {
             trienodes: trieallocator,
             results: Allocator::with_capacity(n),
             len: 0,
-            should_drop: true,
         }
     }
 
@@ -438,7 +438,7 @@ static PREFIX_OF_BIT: [u8; 32] = [// 0       1       2      3        4       5  
                                   // 24      25      26      27      28      29      30      31
                                   0b1000, 0b1001, 0b1010, 0b1011, 0b1100, 0b1101, 0b1110, 0b1111];
 
-fn tree_next<T: Sized>(
+fn tree_next<T: Copy + Default>(
     trie: &TreeBitmap<T>,
     path: &mut Vec<PathElem>,
     nibbles: &mut Vec<u8>,
@@ -481,7 +481,7 @@ fn tree_next<T: Sized>(
     }
 }
 
-impl<'a, T: 'a> Iterator for TreeBitmapIter<'a, T> {
+impl<'a, T: Copy + Default + 'a> Iterator for TreeBitmapIter<'a, T> {
     type Item = (Vec<u8>, u32, &'a T); //(nibbles, masklen, &T)
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -491,18 +491,6 @@ impl<'a, T: 'a> Iterator for TreeBitmapIter<'a, T> {
                 Some((path, bits_matched, value))
             }
             None => None,
-        }
-    }
-}
-
-impl<T> Drop for TreeBitmap<T> {
-    fn drop(&mut self) {
-        if self.should_drop {
-            for (_, _, item) in self.iter() {
-                unsafe {
-                    std::ptr::read(item);
-                }
-            }
         }
     }
 }

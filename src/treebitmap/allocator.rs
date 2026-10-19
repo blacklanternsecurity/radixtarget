@@ -6,55 +6,15 @@
 use std::cmp;
 use std::fmt;
 use std::mem;
-use std::ptr;
-
-struct RawVec<T> {
-    mem: *mut T,
-    cap: usize,
-}
-
-impl<T> RawVec<T> {
-    pub fn with_capacity(cap: usize) -> RawVec<T> {
-        let mut vec = Vec::<T>::with_capacity(cap);
-        let ptr = vec.as_mut_ptr();
-        mem::forget(vec);
-        RawVec { mem: ptr, cap }
-    }
-
-    pub fn cap(&self) -> usize {
-        self.cap
-    }
-
-    pub fn ptr(&self) -> *mut T {
-        self.mem
-    }
-
-    pub fn reserve(&mut self, used_cap: usize, extra_cap: usize) {
-        let mut vec = unsafe { Vec::<T>::from_raw_parts(self.mem, used_cap, self.cap) };
-        vec.reserve(extra_cap);
-        self.cap = vec.capacity();
-        self.mem = vec.as_mut_ptr();
-        mem::forget(vec);
-    }
-}
-
-impl<T> Drop for RawVec<T> {
-    fn drop(&mut self) {
-        unsafe {
-            Vec::from_raw_parts(self.mem, 0, self.cap);
-        }
-    }
-}
-
-unsafe impl<T> Sync for RawVec<T> where T: Sync {}
-
-unsafe impl<T> Send for RawVec<T> where T: Send {}
 
 /// A vector that contains `len / spacing` buckets and each bucket contains `spacing` elements.
 /// Buckets are store contiguously in the vector.
 /// So slots are multiples of `spacing`.
+///
+/// Every access goes through a slice of exactly one bucket, so an out-of-range
+/// index panics instead of touching a neighbouring bucket.
 pub struct BucketVec<T> {
-    buf: RawVec<T>,
+    buf: Vec<T>,
     freelist: Vec<u32>,
     len: u32,
     spacing: u32,
@@ -66,16 +26,16 @@ impl<T: fmt::Debug> fmt::Debug for BucketVec<T> {
             .field("spacing", &self.spacing)
             .field("freelist", &self.freelist)
             .field("len", &self.len)
-            .field("cap", &self.buf.cap())
-            .field("buf", &format!("RawVec<T> len={}", self.len))
+            .field("cap", &self.buf.capacity())
+            .field("buf", &format!("Vec<T> len={}", self.len))
             .finish()
     }
 }
 
-impl<T: Sized> BucketVec<T> {
+impl<T: Copy + Default> BucketVec<T> {
     pub fn with_capacity(spacing: u32, capacity: usize) -> BucketVec<T> {
         BucketVec {
-            buf: RawVec::with_capacity(capacity),
+            buf: Vec::with_capacity(capacity),
             freelist: Vec::with_capacity(32),
             len: 0,
             spacing,
@@ -87,23 +47,26 @@ impl<T: Sized> BucketVec<T> {
         Self::with_capacity(spacing, 0)
     }
 
+    #[inline]
+    fn bucket(&self, slot: u32) -> &[T] {
+        debug_assert!(slot.is_multiple_of(self.spacing));
+        &self.buf[slot as usize..(slot + self.spacing) as usize]
+    }
+
+    #[inline]
+    fn bucket_mut(&mut self, slot: u32) -> &mut [T] {
+        debug_assert!(slot.is_multiple_of(self.spacing));
+        &mut self.buf[slot as usize..(slot + self.spacing) as usize]
+    }
+
     /// Allocate a bucket slot.
     pub fn alloc_slot(&mut self) -> u32 {
         match self.freelist.pop() {
             Some(n) => n,
             None => {
-                self.buf.reserve(self.len as usize, self.spacing as usize);
-                if cfg!(debug_assertions) {
-                    unsafe {
-                        ptr::write_bytes(
-                            self.buf.ptr().offset(self.len as isize),
-                            0,
-                            self.spacing as usize,
-                        );
-                    }
-                }
                 let slot = self.len;
                 self.len += self.spacing;
+                self.buf.resize(self.len as usize, T::default());
                 slot
             }
         }
@@ -116,95 +79,49 @@ impl<T: Sized> BucketVec<T> {
 
     #[inline]
     pub fn get_slot_entry(&self, slot: u32, index: u32) -> &T {
-        debug_assert!(slot.is_multiple_of(self.spacing));
-        let offset = slot + index;
-        unsafe {
-            let src_ptr = self.buf.ptr().offset(offset as isize);
-            &*src_ptr
-        }
+        &self.bucket(slot)[index as usize]
     }
 
     pub fn set_slot_entry(&mut self, slot: u32, index: u32, value: T) {
-        debug_assert!(slot.is_multiple_of(self.spacing));
-        debug_assert!(index < self.spacing);
-        let offset = slot + index;
-        unsafe {
-            let dst_ptr = self.buf.ptr().offset(offset as isize);
-            ptr::write(dst_ptr, value);
-        }
+        self.bucket_mut(slot)[index as usize] = value;
     }
 
     pub fn replace_slot_entry(&mut self, slot: u32, index: u32, value: T) -> T {
-        debug_assert!(slot.is_multiple_of(self.spacing));
-        debug_assert!(index < self.spacing);
-        let offset = slot + index;
-        unsafe {
-            let dst_ptr = self.buf.ptr().offset(offset as isize);
-            ptr::replace(dst_ptr, value)
-        }
+        mem::replace(&mut self.bucket_mut(slot)[index as usize], value)
     }
 
     /// Insert ```value``` into ```slot``` at ```index```. Values to the right
     /// of ```index``` will be moved.
     /// If all values have been set the last value will be lost.
     pub fn insert_slot_entry(&mut self, slot: u32, index: u32, value: T) {
-        debug_assert!(slot.is_multiple_of(self.spacing));
-        let offset = slot + index;
-        unsafe {
-            let dst_ptr = self.buf.ptr().offset(offset as isize);
-            ptr::copy(
-                dst_ptr,
-                dst_ptr.offset(1),
-                (self.spacing - index - 1) as usize,
-            );
-            ptr::write(dst_ptr, value);
-        }
+        let bucket = self.bucket_mut(slot);
+        let index = index as usize;
+        let last = bucket.len() - 1;
+        bucket.copy_within(index..last, index + 1);
+        bucket[index] = value;
     }
 
     pub fn remove_slot_entry(&mut self, slot: u32, index: u32) -> T {
-        debug_assert!(slot.is_multiple_of(self.spacing));
-        debug_assert!(index < self.spacing);
-        let offset = slot + index;
-        let ret: T;
-        unsafe {
-            ret = ptr::read(self.buf.ptr().offset(offset as isize));
-            let dst_ptr = self.buf.ptr().offset(offset as isize);
-            ptr::copy(
-                dst_ptr.offset(1),
-                dst_ptr,
-                (self.spacing - index - 1) as usize,
-            );
-            if cfg!(debug_assertions) {
-                ptr::write(
-                    dst_ptr.offset((self.spacing - index - 1) as isize),
-                    mem::zeroed(),
-                );
-            }
-        }
+        let bucket = self.bucket_mut(slot);
+        let index = index as usize;
+        let ret = bucket[index];
+        bucket.copy_within(index + 1.., index);
+        let last = bucket.len() - 1;
+        bucket[last] = T::default();
         ret
     }
 
     /// Move contents from one bucket to another.
     /// Returns the offset of the new location.
     fn move_slot(&mut self, slot: u32, dst: &mut BucketVec<T>) -> u32 {
-        let nitems = cmp::min(self.spacing, dst.spacing);
+        let nitems = cmp::min(self.spacing, dst.spacing) as usize;
 
         debug_assert!(slot < self.len);
-        debug_assert!(slot.is_multiple_of(self.spacing));
         debug_assert!(nitems > 0);
-        debug_assert!(nitems <= self.spacing);
-        debug_assert!(nitems <= dst.spacing);
 
         let dst_slot = dst.alloc_slot();
-
-        unsafe {
-            let src_ptr = self.buf.ptr().offset(slot as isize);
-            let dst_ptr = dst.buf.ptr().offset(dst_slot as isize);
-            ptr::copy_nonoverlapping(src_ptr, dst_ptr, nitems as usize);
-            if cfg!(debug_assertions) {
-                ptr::write_bytes(src_ptr, 0, nitems as usize);
-            }
-        }
+        dst.bucket_mut(dst_slot)[..nitems].copy_from_slice(&self.bucket(slot)[..nitems]);
+        self.bucket_mut(slot).fill(T::default());
 
         self.free_slot(slot);
 
@@ -219,8 +136,7 @@ static LEN2BUCKET: [u32; 33] = [
 
 #[inline]
 pub fn choose_bucket(len: u32) -> u32 {
-    debug_assert!(len < 33);
-    unsafe { *LEN2BUCKET.get_unchecked(len as usize) }
+    LEN2BUCKET[len as usize]
 }
 
 /// ```Allocator``` stores items in exponentially sized buckets (using
@@ -253,7 +169,7 @@ impl AllocatorHandle {
     }
 }
 
-impl<T: Sized> Allocator<T> {
+impl<T: Copy + Default> Allocator<T> {
     /// Initialize a new allocator with default capacity.
     #[allow(dead_code)]
     pub fn new() -> Allocator<T> {
