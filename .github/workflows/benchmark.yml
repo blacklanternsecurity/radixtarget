@@ -36,7 +36,11 @@ jobs:
           retention-days: 30
 
       - name: Comment benchmark results on PR
-        if: github.event_name == 'pull_request'
+        # fork and dependabot PRs get a read-only token and cannot comment
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]'
         uses: actions/github-script@v8
         with:
           script: |
