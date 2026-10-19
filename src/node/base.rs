@@ -39,7 +39,7 @@ pub trait BaseNode {
         Self: Sized,
     {
         let mut hosts = Vec::new();
-        for (_, child) in self.children_mut().iter_mut() {
+        for child in self.children_mut().values_mut() {
             hosts.extend(child.clear());
             if let Some(host) = child.host_string() {
                 hosts.push(host);

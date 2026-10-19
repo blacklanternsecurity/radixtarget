@@ -2,7 +2,7 @@ sentinel = object()
 
 
 class RadixTreeNode:
-    __slots__ = ("children", "host", "data")
+    __slots__ = ("children", "data", "host")
 
     def __init__(self):
         self.children = {}
