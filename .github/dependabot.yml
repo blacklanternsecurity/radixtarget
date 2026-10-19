@@ -19,3 +19,4 @@ updates:
           - "*"  # Group all Actions updates into a single larger pull request
     schedule:
       interval: weekly
+    target-branch: "dev"
