@@ -1,12 +1,20 @@
 # RadixTarget
 
-[![Python Version](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org) [![Rust Version](https://img.shields.io/badge/rust-1.70+-orange)](https://www.rust-lang.org) [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/master/LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/tests.yml) [![Codecov](https://codecov.io/gh/blacklanternsecurity/radixtarget/graph/badge.svg?token=7IPWMYMTGZ)](https://codecov.io/gh/blacklanternsecurity/radixtarget)
+[![Python Version](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org)
+[![PyPI](https://img.shields.io/pypi/v/radixtarget)](https://pypi.org/project/radixtarget/)
+[![Rust Version](https://img.shields.io/badge/rust-1.70+-orange)](https://www.rust-lang.org)
+[![Crates.io](https://img.shields.io/crates/v/radixtarget?color=orange)](https://crates.io/crates/radixtarget)
+[![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/stable/LICENSE)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Rust Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml/badge.svg?branch=stable)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml)
+[![Python Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml/badge.svg?branch=stable)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml)
+[![Codecov](https://codecov.io/gh/blacklanternsecurity/radixtarget/graph/badge.svg?token=7IPWMYMTGZ)](https://codecov.io/gh/blacklanternsecurity/radixtarget)
 
 RadixTarget is a performant radix implementation designed for quick lookups of IP addresses/networks and DNS hostnames. 
 
 RadixTarget is:
 - Written in Rust with Python bindings
-- Capable of ~200,000 lookups per second regardless of database size
+- Capable of ~1,000,000 lookups per second regardless of database size
 - 100% test coverage
 - Available as both a Rust crate and Python package
 - Used by:
@@ -51,7 +59,31 @@ rt.get("example.com") # None
 # Custom data nodes
 rt.add("evilcorp.co.uk", "custom_data")
 rt.get("www.evilcorp.co.uk") # "custom_data"
+
+# Insertion returns unique identifier
+insertion_id = rt.insert("10.0.0.1/8")
+assert insertion_id == "10.0.0.0/8"
+
+# insert() raises ValueError for invalid input
+try:
+    rt.insert("http://example.com")
+except ValueError:
+    pass  # Invalid characters in hostname
+
+# Store custom data with any entry
+rt.insert("example.org", data={"tags": ["production"], "priority": 1})
+result = rt.get("api.example.org")
+# result contains your custom data: {"tags": ["production"], "priority": 1}
 ```
+
+## API Differences: Python vs Rust
+
+Both APIs provide an `insert()` method that returns a unique string identifier for each entry (a normalized version of the hostname or IP address). However, the Python API includes additional functionality:
+
+- **Rust**: `insert()` returns a string that uniquely identifies the insertion
+- **Python**: `insert()` also returns this unique identifier string, but additionally supports a `data=` parameter that allows you to store custom data of any Python type alongside the entry. When you later call `get()`, it returns your custom data instead of just the matched target string.
+
+This makes the Python API more flexible for applications that need to associate metadata with targets, while the Rust API focuses on pure performance for lookups.
 
 ## Rust
 
@@ -74,6 +106,10 @@ let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
 rt.insert("192.168.1.0/24"); 
 assert_eq!(rt.get("192.168.1.100"), Some("192.168.1.0/24".to_string()));
 assert_eq!(rt.get("192.168.2.100"), None);
+
+// insert() returns Result - Ok with normalized identifier or Err for invalid input
+assert!(rt.insert("10.0.0.0/8").is_ok());
+assert!(rt.insert("http://example.com").is_err());
 
 // IPv6 networks and addresses  
 rt.insert("dead::/64");
@@ -149,4 +185,29 @@ let rt = RadixTarget::new(&hosts, ScopeMode::Normal);
 assert!(rt.contains("192.168.1.100"));
 assert!(rt.contains("subdomain.example.com"));
 assert!(rt.contains("dead::beef"));
+```
+
+## Development
+
+### Running Tests
+
+```bash
+# Rust tests
+cargo test --verbose --all-features
+
+# Python tests
+uv run pytest
+```
+
+### Linting
+
+```bash
+# Run clippy
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Check formatting
+cargo fmt --all -- --check
+
+# Python linting
+uv run ruff check && uv run ruff format
 ```

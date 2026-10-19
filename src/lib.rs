@@ -1,6 +1,3 @@
-use pyo3::prelude::*;
-use pyo3::types::PyList;
-
 pub mod dns;
 pub mod fast_ip;
 pub mod ip;
@@ -11,13 +8,21 @@ pub mod utils;
 
 pub use dns::ScopeMode;
 pub use target::RadixTarget;
+
+#[cfg(feature = "py")]
+use pyo3::prelude::*;
+#[cfg(feature = "py")]
+use pyo3::types::PyList;
+#[cfg(feature = "py")]
 use utils::host_size_key;
 
+#[cfg(feature = "py")]
 #[pyclass]
 struct PyRadixTarget {
     inner: RadixTarget,
 }
 
+#[cfg(feature = "py")]
 #[pymethods]
 impl PyRadixTarget {
     #[new]
@@ -33,17 +38,22 @@ impl PyRadixTarget {
                 ));
             }
         };
-        let mut inner = RadixTarget::new(&[], scope_mode);
+        let mut inner =
+            RadixTarget::new(&[], scope_mode).map_err(pyo3::exceptions::PyValueError::new_err)?;
         if let Some(hosts_list) = hosts {
             for host in hosts_list.iter() {
-                inner.insert(&host.extract::<String>()?);
+                inner
+                    .insert(&host.extract::<String>()?)
+                    .map_err(pyo3::exceptions::PyValueError::new_err)?;
             }
         }
         Ok(PyRadixTarget { inner })
     }
 
-    fn insert(&mut self, value: &str) -> Option<String> {
-        self.inner.insert(value)
+    fn insert(&mut self, value: &str) -> PyResult<Option<String>> {
+        self.inner
+            .insert(value)
+            .map_err(pyo3::exceptions::PyValueError::new_err)
     }
 
     fn len(&self) -> usize {
@@ -126,12 +136,14 @@ impl PyRadixTarget {
     }
 }
 
+#[cfg(feature = "py")]
 #[pyclass]
 struct PyRadixTargetIterator {
     hosts: Vec<String>,
     index: usize,
 }
 
+#[cfg(feature = "py")]
 #[pymethods]
 impl PyRadixTargetIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -150,13 +162,15 @@ impl PyRadixTargetIterator {
 }
 
 /// PyO3 wrapper for the host_size_key function
+#[cfg(feature = "py")]
 #[pyfunction]
 fn py_host_size_key(host: &Bound<'_, pyo3::PyAny>) -> PyResult<(i64, String)> {
     // Convert the input to string - this handles both str and ipaddress objects
     let host_str = host.str()?.to_string();
-    Ok(host_size_key(&host_str))
+    host_size_key(&host_str).map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+#[cfg(feature = "py")]
 #[pymodule]
 fn _radixtarget(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRadixTarget>()?;

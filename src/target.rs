@@ -16,7 +16,7 @@ pub struct RadixTarget {
 }
 
 impl RadixTarget {
-    pub fn new(hosts: &[&str], scope_mode: ScopeMode) -> Self {
+    pub fn new(hosts: &[&str], scope_mode: ScopeMode) -> Result<Self, String> {
         let dns = DnsRadixTree::new(scope_mode);
         let acl_mode = scope_mode == ScopeMode::Acl;
         let mut rt = RadixTarget {
@@ -27,29 +27,29 @@ impl RadixTarget {
             scope_mode,
         };
         for &host in hosts {
-            rt.insert(host);
+            rt.insert(host)?;
         }
-        rt
+        Ok(rt)
     }
 
     /// Insert a target (IP network, IP address, or DNS name). Returns the canonicalized value.
-    pub fn insert(&mut self, value: &str) -> Option<String> {
+    pub fn insert(&mut self, value: &str) -> Result<Option<String>, String> {
         // Invalidate cached hash
         *self.cached_hash.lock().unwrap() = None;
 
         // Hosts are now tracked directly in the trees, no need to maintain separate set
         if let Ok(ipnet) = value.parse::<IpNet>() {
-            self.ip_tree.insert(ipnet)
+            Ok(self.ip_tree.insert(ipnet))
         } else if let Ok(ipaddr) = value.parse::<IpAddr>() {
             // Convert bare IP address to /32 or /128 network for both storage and return
             let net = match ipaddr {
                 IpAddr::V4(addr) => IpNet::V4(ipnet::Ipv4Net::new(addr, 32).unwrap()),
                 IpAddr::V6(addr) => IpNet::V6(ipnet::Ipv6Net::new(addr, 128).unwrap()),
             };
-            self.ip_tree.insert(net)
+            Ok(self.ip_tree.insert(net))
         } else {
-            let canonical = normalize_dns(value);
-            self.dns.insert(&canonical)
+            let canonical = normalize_dns(value)?;
+            Ok(self.dns.insert(&canonical))
         }
     }
 
@@ -75,8 +75,11 @@ impl RadixTarget {
             };
             self.ip_tree.get(&net).is_some()
         } else {
-            let canonical = normalize_dns(value);
-            self.dns.get(&canonical).is_some()
+            // Invalid DNS names are not contained
+            normalize_dns(value)
+                .ok()
+                .and_then(|canonical| self.dns.get(&canonical))
+                .is_some()
         }
     }
 
@@ -98,13 +101,17 @@ impl RadixTarget {
             };
             self.ip_tree.delete(net)
         } else {
-            let canonical = normalize_dns(value);
-            self.dns.delete(&canonical)
+            // Invalid DNS names cannot be deleted (return false)
+            match normalize_dns(value) {
+                Ok(canonical) => self.dns.delete(&canonical),
+                Err(_) => false,
+            }
         };
         // Remove the canonical form from hosts, not the original input
         if deleted && value.parse::<IpNet>().is_err() && value.parse::<IpAddr>().is_err() {
-            let canonical = normalize_dns(value);
-            self.hosts.remove(&canonical);
+            if let Ok(canonical) = normalize_dns(value) {
+                self.hosts.remove(&canonical);
+            }
         } else {
             self.hosts.remove(value);
         }
@@ -122,8 +129,10 @@ impl RadixTarget {
             };
             self.ip_tree.get(&net)
         } else {
-            let canonical = normalize_dns(value);
-            self.dns.get(&canonical)
+            // Invalid DNS names return None
+            normalize_dns(value)
+                .ok()
+                .and_then(|canonical| self.dns.get(&canonical))
         }
     }
 
@@ -213,8 +222,8 @@ mod tests {
 
     #[test]
     fn test_insert_and_get_ipv4() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        let host = rt.insert("8.8.8.0/24");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let host = rt.insert("8.8.8.0/24").unwrap();
         assert_eq!(host, Some("8.8.8.0/24".to_string()));
         assert_eq!(rt.get("8.8.8.8/32"), Some("8.8.8.0/24".to_string()));
         assert_eq!(rt.get("1.1.1.1/32"), None);
@@ -222,8 +231,8 @@ mod tests {
 
     #[test]
     fn test_insert_and_get_ipv6() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        let host = rt.insert("dead::/64");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let host = rt.insert("dead::/64").unwrap();
         assert_eq!(host, Some("dead::/64".to_string()));
         assert_eq!(rt.get("dead::beef/128"), Some("dead::/64".to_string()));
         assert_eq!(rt.get("cafe::beef/128"), None);
@@ -231,8 +240,8 @@ mod tests {
 
     #[test]
     fn test_insert_and_get_dns() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        let host = rt.insert("example.com");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let host = rt.insert("example.com").unwrap();
         assert_eq!(host, Some("example.com".to_string()));
         assert_eq!(rt.get("example.com"), Some("example.com".to_string()));
         assert_eq!(rt.get("notfound.com"), None);
@@ -240,8 +249,8 @@ mod tests {
 
     #[test]
     fn test_dns_subdomain_matching() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        let host = rt.insert("api.test.www.example.com");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let host = rt.insert("api.test.www.example.com").unwrap();
         assert_eq!(host, Some("api.test.www.example.com".to_string()));
         assert_eq!(
             rt.get("wat.hm.api.test.www.example.com"),
@@ -252,8 +261,8 @@ mod tests {
 
     #[test]
     fn test_dns_strict_scope() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Strict);
-        let host = rt.insert("example.com");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
+        let host = rt.insert("example.com").unwrap();
         assert_eq!(host, Some("example.com".to_string()));
         assert_eq!(rt.get("example.com"), Some("example.com".to_string()));
         assert_eq!(rt.get("www.example.com"), None);
@@ -262,8 +271,8 @@ mod tests {
 
     #[test]
     fn test_delete_ipv4() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        let host = rt.insert("8.8.8.0/24");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let host = rt.insert("8.8.8.0/24").unwrap();
         assert_eq!(host, Some("8.8.8.0/24".to_string()));
         assert_eq!(rt.get("8.8.8.8/32"), Some("8.8.8.0/24".to_string()));
         assert!(rt.delete("8.8.8.0/24"));
@@ -273,8 +282,8 @@ mod tests {
 
     #[test]
     fn test_delete_dns() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        let host = rt.insert("example.com");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let host = rt.insert("example.com").unwrap();
         assert_eq!(host, Some("example.com".to_string()));
         assert_eq!(rt.get("example.com"), Some("example.com".to_string()));
         assert!(rt.delete("example.com"));
@@ -289,9 +298,9 @@ mod tests {
         // internal HashMap structure manipulation that doesn't apply to the new implementation.
 
         // Basic functionality test instead
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        rt.insert("192.168.0.0/24");
-        rt.insert("192.168.0.0/30");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        rt.insert("192.168.0.0/24").unwrap();
+        rt.insert("192.168.0.0/30").unwrap();
 
         assert_eq!(rt.get("192.168.0.1"), Some("192.168.0.0/30".to_string()));
         assert_eq!(rt.get("192.168.0.200"), Some("192.168.0.0/24".to_string()));
@@ -303,9 +312,9 @@ mod tests {
     #[test]
     fn test_prune_dns() {
         // dns pruning
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
-        rt.insert("example.com");
-        rt.insert("api.test.www.example.com");
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        rt.insert("example.com").unwrap();
+        rt.insert("api.test.www.example.com").unwrap();
         // Walk to the "api" node
         let mut node = &mut rt.dns.root;
         use idna::domain_to_ascii;
@@ -345,10 +354,10 @@ mod tests {
     #[test]
     fn test_defrag_basic_merge() {
         // Two mergeable subnets
-        let mut target = RadixTarget::new(&[], ScopeMode::Normal);
-        target.insert("192.168.0.0/25");
-        target.insert("192.168.0.128/25");
-        target.insert("www.evilcorp.com");
+        let mut target = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        target.insert("192.168.0.0/25").unwrap();
+        target.insert("192.168.0.128/25").unwrap();
+        target.insert("www.evilcorp.com").unwrap();
         let expected_hosts: HashSet<String> =
             ["192.168.0.0/25", "192.168.0.128/25", "www.evilcorp.com"]
                 .iter()
@@ -373,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_defrag_recursive_merge_ipv4() {
-        let mut target = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut target = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
         for net in [
             "192.168.0.0/25",
             "192.168.0.128/27",
@@ -388,7 +397,7 @@ mod tests {
         ]
         .iter()
         {
-            target.insert(net);
+            target.insert(net).unwrap();
         }
         let expected_hosts: HashSet<String> = [
             "192.168.0.0/25",
@@ -433,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_defrag_recursive_merge_ipv6() {
-        let mut target = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut target = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
         for net in [
             "dead:beef::/121",
             "dead:beef::80/123",
@@ -448,7 +457,7 @@ mod tests {
         ]
         .iter()
         {
-            target.insert(net);
+            target.insert(net).unwrap();
         }
         let expected_hosts: HashSet<String> = [
             "dead:beef::/121",
@@ -493,13 +502,13 @@ mod tests {
 
     #[test]
     fn test_defrag_small_recursive() {
-        let mut target = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut target = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
         // Four /26s covering 192.168.1.0/25 and 192.168.1.128/25
-        target.insert("192.168.1.0/26");
-        target.insert("192.168.1.64/26");
-        target.insert("192.168.1.128/26");
-        target.insert("192.168.1.192/26");
-        target.insert("192.168.0.0/24");
+        target.insert("192.168.1.0/26").unwrap();
+        target.insert("192.168.1.64/26").unwrap();
+        target.insert("192.168.1.128/26").unwrap();
+        target.insert("192.168.1.192/26").unwrap();
+        target.insert("192.168.0.0/24").unwrap();
         // Single defrag: should merge the /26s into /25s, then into a /24, then merge the two /24s into a /23
         let (cleaned, new) = target.defrag();
         let expected_cleaned: HashSet<String> = [
@@ -520,7 +529,7 @@ mod tests {
 
     #[test]
     fn test_insert_malformed_data() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
         let malformed_inputs = [
             "999.999.999.999",        // invalid IPv4
             "256.256.256.256/33",     // invalid IPv4 CIDR
@@ -559,19 +568,19 @@ mod tests {
     #[test]
     fn test_hash_same_hosts_different_order() {
         // Test that targets with same hosts in different order have same hash
-        let mut rt1 = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut rt2 = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt1 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut rt2 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Add hosts in different orders
-        rt1.insert("example.com");
-        rt1.insert("192.168.1.0/24");
-        rt1.insert("test.org");
-        rt1.insert("10.0.0.0/8");
+        let _ = rt1.insert("example.com");
+        let _ = rt1.insert("192.168.1.0/24");
+        let _ = rt1.insert("test.org");
+        let _ = rt1.insert("10.0.0.0/8");
 
-        rt2.insert("10.0.0.0/8");
-        rt2.insert("test.org");
-        rt2.insert("192.168.1.0/24");
-        rt2.insert("example.com");
+        let _ = rt2.insert("10.0.0.0/8");
+        let _ = rt2.insert("test.org");
+        let _ = rt2.insert("192.168.1.0/24");
+        let _ = rt2.insert("example.com");
 
         let hash1 = rt1.hash();
         let hash2 = rt2.hash();
@@ -586,15 +595,15 @@ mod tests {
     #[test]
     fn test_hash_strict_vs_non_strict() {
         // Test that strict and non-strict targets with same hosts have different hashes
-        let mut rt_strict = RadixTarget::new(&[], ScopeMode::Strict);
-        let mut rt_non_strict = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt_strict = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
+        let mut rt_non_strict = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Add same hosts to both
-        rt_strict.insert("example.com");
-        rt_strict.insert("192.168.1.0/24");
+        let _ = rt_strict.insert("example.com");
+        let _ = rt_strict.insert("192.168.1.0/24");
 
-        rt_non_strict.insert("example.com");
-        rt_non_strict.insert("192.168.1.0/24");
+        let _ = rt_non_strict.insert("example.com");
+        let _ = rt_non_strict.insert("192.168.1.0/24");
 
         let hash_strict = rt_strict.hash();
         let hash_non_strict = rt_non_strict.hash();
@@ -612,16 +621,16 @@ mod tests {
     #[test]
     fn test_hash_missing_host_scenario() {
         // Test hash equality before and after adding missing host
-        let mut rt1 = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut rt2 = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt1 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut rt2 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // rt1 has all hosts, rt2 is missing one
-        rt1.insert("example.com");
-        rt1.insert("192.168.1.0/24");
-        rt1.insert("test.org");
+        let _ = rt1.insert("example.com");
+        let _ = rt1.insert("192.168.1.0/24");
+        let _ = rt1.insert("test.org");
 
-        rt2.insert("example.com");
-        rt2.insert("192.168.1.0/24");
+        let _ = rt2.insert("example.com");
+        let _ = rt2.insert("192.168.1.0/24");
 
         let hash1_before = rt1.hash();
         let hash2_before = rt2.hash();
@@ -633,7 +642,7 @@ mod tests {
         assert_ne!(rt1, rt2, "Targets with different hosts should not be equal");
 
         // Add missing host to rt2
-        rt2.insert("test.org");
+        let _ = rt2.insert("test.org");
 
         let hash1_after = rt1.hash();
         let hash2_after = rt2.hash();
@@ -657,10 +666,10 @@ mod tests {
     #[test]
     fn test_hash_caching_and_invalidation() {
         // Test that hash is cached and invalidated properly
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
-        rt.insert("example.com");
-        rt.insert("192.168.1.0/24");
+        let _ = rt.insert("example.com");
+        let _ = rt.insert("192.168.1.0/24");
 
         // Get hash twice - should be same (cached)
         let hash1 = rt.hash();
@@ -671,7 +680,7 @@ mod tests {
         );
 
         // Insert new host - should invalidate cache
-        rt.insert("test.org");
+        let _ = rt.insert("test.org");
         let hash3 = rt.hash();
         assert_ne!(hash1, hash3, "Hash should change after inserting new host");
 
@@ -702,9 +711,9 @@ mod tests {
     #[test]
     fn test_empty_target_hash() {
         // Test hash of empty targets
-        let rt1 = RadixTarget::new(&[], ScopeMode::Normal);
-        let rt2 = RadixTarget::new(&[], ScopeMode::Normal);
-        let rt3 = RadixTarget::new(&[], ScopeMode::Strict);
+        let rt1 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let rt2 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let rt3 = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
 
         let hash1 = rt1.hash();
         let hash2 = rt2.hash();
@@ -723,19 +732,19 @@ mod tests {
     #[test]
     fn test_hash_consistency_across_operations() {
         // Test that hash remains consistent across various operations
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Build up target
-        rt.insert("example.com");
-        rt.insert("192.168.1.0/24");
-        rt.insert("test.org");
+        let _ = rt.insert("example.com");
+        let _ = rt.insert("192.168.1.0/24");
+        let _ = rt.insert("test.org");
         let final_hash = rt.hash();
 
         // Create another target with same hosts and same strict_scope
-        let mut rt2 = RadixTarget::new(&[], ScopeMode::Normal);
-        rt2.insert("test.org");
-        rt2.insert("example.com");
-        rt2.insert("192.168.1.0/24");
+        let mut rt2 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let _ = rt2.insert("test.org");
+        let _ = rt2.insert("example.com");
+        let _ = rt2.insert("192.168.1.0/24");
 
         assert_eq!(
             final_hash,
@@ -749,7 +758,7 @@ mod tests {
 
         // Test that adding and removing the same host doesn't change hash
         let original_hash = rt.hash();
-        rt.insert("temp.com");
+        let _ = rt.insert("temp.com");
         rt.delete("temp.com");
         let restored_hash = rt.hash();
 
@@ -762,10 +771,10 @@ mod tests {
     #[test]
     fn test_equality_with_same_strict_scope() {
         // Test that targets with same hosts and same strict_scope are equal
-        let mut rt1_strict = RadixTarget::new(&[], ScopeMode::Strict);
-        let mut rt2_strict = RadixTarget::new(&[], ScopeMode::Strict);
-        let mut rt1_non_strict = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut rt2_non_strict = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt1_strict = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
+        let mut rt2_strict = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
+        let mut rt1_non_strict = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut rt2_non_strict = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Add same hosts to all targets
         for rt in [
@@ -774,8 +783,8 @@ mod tests {
             &mut rt1_non_strict,
             &mut rt2_non_strict,
         ] {
-            rt.insert("example.com");
-            rt.insert("192.168.1.0/24");
+            let _ = rt.insert("example.com");
+            let _ = rt.insert("192.168.1.0/24");
         }
 
         // Targets with same strict_scope should be equal
@@ -802,10 +811,10 @@ mod tests {
     #[test]
     fn test_ip_normalization_single_hosts() {
         // Test that single host IPs are consistently stored as /32 or /128 networks
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Insert individual IPv4 address
-        rt.insert("192.168.1.100");
+        let _ = rt.insert("192.168.1.100");
         // Should be stored as /32 network
         assert!(
             rt.hosts().contains("192.168.1.100/32"),
@@ -817,7 +826,7 @@ mod tests {
         );
 
         // Insert individual IPv6 address
-        rt.insert("dead::beef");
+        let _ = rt.insert("dead::beef");
         // Should be stored as /128 network
         assert!(
             rt.hosts().contains("dead::beef/128"),
@@ -829,7 +838,7 @@ mod tests {
         );
 
         // Insert /32 IPv4 network explicitly
-        rt.insert("10.0.0.1/32");
+        let _ = rt.insert("10.0.0.1/32");
         assert!(
             rt.hosts().contains("10.0.0.1/32"),
             "IPv4 /32 should be stored as /32"
@@ -840,7 +849,7 @@ mod tests {
         );
 
         // Insert /128 IPv6 network explicitly
-        rt.insert("cafe::1/128");
+        let _ = rt.insert("cafe::1/128");
         assert!(
             rt.hosts().contains("cafe::1/128"),
             "IPv6 /128 should be stored as /128"
@@ -851,8 +860,8 @@ mod tests {
         );
 
         // Insert IP networks with actual network bits (should remain as-is)
-        rt.insert("10.0.0.0/8");
-        rt.insert("cafe::/64");
+        let _ = rt.insert("10.0.0.0/8");
+        let _ = rt.insert("cafe::/64");
         assert!(
             rt.hosts().contains("10.0.0.0/8"),
             "IPv4 network should remain as-is"
@@ -863,7 +872,7 @@ mod tests {
         );
 
         // Insert DNS name (should remain as-is)
-        rt.insert("example.com");
+        let _ = rt.insert("example.com");
         assert!(
             rt.hosts().contains("example.com"),
             "DNS name should remain as-is"
@@ -911,10 +920,10 @@ mod tests {
 
     #[test]
     fn test_dns_case_normalization() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Insert with mixed case
-        let host1 = rt.insert("Example.COM");
+        let host1 = rt.insert("Example.COM").unwrap();
 
         // All case variations should find the same entry
         assert_eq!(rt.get("example.com"), host1.clone());
@@ -936,14 +945,14 @@ mod tests {
 
     #[test]
     fn test_dns_idna_normalization() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Unicode domain that gets converted to punycode
         let unicode = "café.com";
         let punycode = "xn--caf-dma.com";
 
         // Insert unicode
-        let host1 = rt.insert(unicode);
+        let host1 = rt.insert(unicode).unwrap();
 
         assert_eq!(rt.hosts(), set_of_strs(vec!["xn--caf-dma.com".to_string()]));
 
@@ -967,10 +976,10 @@ mod tests {
 
     #[test]
     fn test_dns_mixed_case_and_idna() {
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Insert with mixed case unicode
-        let host1 = rt.insert("CAFÉ.COM");
+        let host1 = rt.insert("CAFÉ.COM").unwrap();
 
         // All variations should work
         assert_eq!(rt.get("café.com"), host1.clone());
@@ -987,25 +996,25 @@ mod tests {
     #[test]
     fn test_contains_target() {
         // Test basic containment scenarios
-        let mut superset = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut subset = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut disjoint = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut superset = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut subset = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut disjoint = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Setup superset with broad coverage
-        superset.insert("example.com");
-        superset.insert("192.168.0.0/16");
-        superset.insert("test.org");
-        superset.insert("10.0.0.0/8");
-        superset.insert("dead:beef::/32");
+        let _ = superset.insert("example.com");
+        let _ = superset.insert("192.168.0.0/16");
+        let _ = superset.insert("test.org");
+        let _ = superset.insert("10.0.0.0/8");
+        let _ = superset.insert("dead:beef::/32");
 
         // Setup subset with targets covered by superset
-        subset.insert("sub.example.com"); // covered by example.com
-        subset.insert("192.168.1.100"); // covered by 192.168.0.0/16
-        subset.insert("10.5.5.5"); // covered by 10.0.0.0/8
+        let _ = subset.insert("sub.example.com"); // covered by example.com
+        let _ = subset.insert("192.168.1.100"); // covered by 192.168.0.0/16
+        let _ = subset.insert("10.5.5.5"); // covered by 10.0.0.0/8
 
         // Setup disjoint set with only some overlap
-        disjoint.insert("example.com");
-        disjoint.insert("172.16.1.0/24");
+        let _ = disjoint.insert("example.com");
+        let _ = disjoint.insert("172.16.1.0/24");
 
         // Test containment relationships
         assert!(
@@ -1044,7 +1053,7 @@ mod tests {
         );
 
         // Test empty target containment
-        let empty = RadixTarget::new(&[], ScopeMode::Normal);
+        let empty = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
         assert!(
             superset.contains_target(&empty),
             "Any target should contain empty target"
@@ -1065,18 +1074,18 @@ mod tests {
 
     #[test]
     fn test_contains_target_ip_networks() {
-        let mut broad = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut specific = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut broad = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut specific = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Broad network coverage
-        broad.insert("192.168.0.0/16");
-        broad.insert("10.0.0.0/8");
-        broad.insert("2001:db8::/32");
+        let _ = broad.insert("192.168.0.0/16");
+        let _ = broad.insert("10.0.0.0/8");
+        let _ = broad.insert("2001:db8::/32");
 
         // Specific networks within broad coverage
-        specific.insert("192.168.1.0/24"); // subset of 192.168.0.0/16
-        specific.insert("10.5.0.0/16"); // subset of 10.0.0.0/8
-        specific.insert("2001:db8:1::/48"); // subset of 2001:db8::/32
+        let _ = specific.insert("192.168.1.0/24"); // subset of 192.168.0.0/16
+        let _ = specific.insert("10.5.0.0/16"); // subset of 10.0.0.0/8
+        let _ = specific.insert("2001:db8:1::/48"); // subset of 2001:db8::/32
 
         assert!(
             broad.contains_target(&specific),
@@ -1088,8 +1097,8 @@ mod tests {
         );
 
         // Test exact matches
-        let mut exact = RadixTarget::new(&[], ScopeMode::Normal);
-        exact.insert("192.168.0.0/16");
+        let mut exact = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let _ = exact.insert("192.168.0.0/16");
         assert!(
             broad.contains_target(&exact),
             "Should contain exact network match"
@@ -1097,10 +1106,10 @@ mod tests {
         assert!(exact.contains_target(&exact), "Should contain itself");
 
         // Test individual IPs
-        let mut single_ips = RadixTarget::new(&[], ScopeMode::Normal);
-        single_ips.insert("192.168.1.100"); // covered by 192.168.0.0/16
-        single_ips.insert("10.0.0.1"); // covered by 10.0.0.0/8
-        single_ips.insert("2001:db8::1"); // covered by 2001:db8::/32
+        let mut single_ips = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let _ = single_ips.insert("192.168.1.100"); // covered by 192.168.0.0/16
+        let _ = single_ips.insert("10.0.0.1"); // covered by 10.0.0.0/8
+        let _ = single_ips.insert("2001:db8::1"); // covered by 2001:db8::/32
 
         assert!(
             broad.contains_target(&single_ips),
@@ -1110,17 +1119,17 @@ mod tests {
 
     #[test]
     fn test_contains_target_dns_hierarchies() {
-        let mut parent = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut child = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut parent = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut child = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Parent domain coverage (Normal mode allows subdomain matching)
-        parent.insert("example.com");
-        parent.insert("test.org");
+        let _ = parent.insert("example.com");
+        let _ = parent.insert("test.org");
 
         // Child domains
-        child.insert("api.example.com");
-        child.insert("www.example.com");
-        child.insert("sub.test.org");
+        let _ = child.insert("api.example.com");
+        let _ = child.insert("www.example.com");
+        let _ = child.insert("sub.test.org");
 
         assert!(
             parent.contains_target(&child),
@@ -1128,8 +1137,8 @@ mod tests {
         );
 
         // Test with exact domain matches
-        let mut exact = RadixTarget::new(&[], ScopeMode::Normal);
-        exact.insert("example.com");
+        let mut exact = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let _ = exact.insert("example.com");
         assert!(
             parent.contains_target(&exact),
             "Should contain exact domain match"
@@ -1138,12 +1147,12 @@ mod tests {
 
     #[test]
     fn test_contains_target_strict_scope() {
-        let mut strict_parent = RadixTarget::new(&[], ScopeMode::Strict);
-        let mut strict_child = RadixTarget::new(&[], ScopeMode::Strict);
+        let mut strict_parent = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
+        let mut strict_child = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
 
         // In strict mode, subdomains are not automatically matched
-        strict_parent.insert("example.com");
-        strict_child.insert("www.example.com");
+        let _ = strict_parent.insert("example.com");
+        let _ = strict_child.insert("www.example.com");
 
         assert!(
             !strict_parent.contains_target(&strict_child),
@@ -1151,8 +1160,8 @@ mod tests {
         );
 
         // But exact matches should work
-        let mut exact = RadixTarget::new(&[], ScopeMode::Strict);
-        exact.insert("example.com");
+        let mut exact = RadixTarget::new(&[], ScopeMode::Strict).unwrap();
+        let _ = exact.insert("example.com");
         assert!(
             strict_parent.contains_target(&exact),
             "Should contain exact match in Strict mode"
@@ -1161,20 +1170,20 @@ mod tests {
 
     #[test]
     fn test_contains_target_mixed_types() {
-        let mut mixed_superset = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut mixed_subset = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut mixed_superset = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut mixed_subset = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Superset with various types
-        mixed_superset.insert("example.com"); // DNS
-        mixed_superset.insert("192.168.0.0/16"); // IPv4 network
-        mixed_superset.insert("10.0.0.1"); // IPv4 address
-        mixed_superset.insert("2001:db8::/32"); // IPv6 network
+        let _ = mixed_superset.insert("example.com"); // DNS
+        let _ = mixed_superset.insert("192.168.0.0/16"); // IPv4 network
+        let _ = mixed_superset.insert("10.0.0.1"); // IPv4 address
+        let _ = mixed_superset.insert("2001:db8::/32"); // IPv6 network
 
         // Subset with targets covered by superset
-        mixed_subset.insert("api.example.com"); // covered by example.com
-        mixed_subset.insert("192.168.1.100"); // covered by 192.168.0.0/16
-        mixed_subset.insert("10.0.0.1"); // exact match
-        mixed_subset.insert("2001:db8:1::1"); // covered by 2001:db8::/32
+        let _ = mixed_subset.insert("api.example.com"); // covered by example.com
+        let _ = mixed_subset.insert("192.168.1.100"); // covered by 192.168.0.0/16
+        let _ = mixed_subset.insert("10.0.0.1"); // exact match
+        let _ = mixed_subset.insert("2001:db8:1::1"); // covered by 2001:db8::/32
 
         assert!(
             mixed_superset.contains_target(&mixed_subset),
@@ -1182,7 +1191,7 @@ mod tests {
         );
 
         // Add something not covered
-        mixed_subset.insert("unrelated.net");
+        let _ = mixed_subset.insert("unrelated.net");
         assert!(
             !mixed_superset.contains_target(&mixed_subset),
             "Should not contain subset with uncovered elements"
@@ -1191,17 +1200,17 @@ mod tests {
 
     #[test]
     fn test_contains_target_partial_overlap() {
-        let mut target1 = RadixTarget::new(&[], ScopeMode::Normal);
-        let mut target2 = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut target1 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let mut target2 = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Partially overlapping sets
-        target1.insert("example.com");
-        target1.insert("192.168.0.0/24");
-        target1.insert("shared.net");
+        let _ = target1.insert("example.com");
+        let _ = target1.insert("192.168.0.0/24");
+        let _ = target1.insert("shared.net");
 
-        target2.insert("test.org");
-        target2.insert("10.0.0.0/8");
-        target2.insert("shared.net");
+        let _ = target2.insert("test.org");
+        let _ = target2.insert("10.0.0.0/8");
+        let _ = target2.insert("shared.net");
 
         // Neither should contain the other
         assert!(
@@ -1214,8 +1223,8 @@ mod tests {
         );
 
         // Test with just the shared element
-        let mut shared_only = RadixTarget::new(&[], ScopeMode::Normal);
-        shared_only.insert("shared.net");
+        let mut shared_only = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
+        let _ = shared_only.insert("shared.net");
         assert!(
             target1.contains_target(&shared_only),
             "Should contain subset with only shared elements"
@@ -1253,13 +1262,13 @@ mod benchmarks {
             cidrs.len()
         );
 
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         println!("🚀 Starting insertion benchmark...");
         let start = Instant::now();
 
         for cidr in &cidrs {
-            rt.insert(cidr);
+            let _ = rt.insert(cidr);
         }
 
         let elapsed = start.elapsed();
@@ -1293,11 +1302,11 @@ mod benchmarks {
             cidrs.len()
         );
 
-        let mut rt = RadixTarget::new(&[], ScopeMode::Normal);
+        let mut rt = RadixTarget::new(&[], ScopeMode::Normal).unwrap();
 
         // Insert all CIDRs first
         for cidr in &cidrs {
-            rt.insert(cidr);
+            let _ = rt.insert(cidr);
         }
 
         println!("✅ Loaded {} CIDR blocks", cidrs.len());

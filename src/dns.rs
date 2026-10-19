@@ -330,7 +330,7 @@ mod tests {
         hosts.shuffle(&mut thread_rng());
 
         for host in &hosts {
-            tree.insert(host);
+            let _ = tree.insert(host);
         }
 
         // Verify all hosts are present
@@ -449,9 +449,9 @@ mod tests {
         let mut tree = DnsRadixTree::new(ScopeMode::Acl);
 
         // Insert child domains first
-        tree.insert("api.example.com");
-        tree.insert("www.example.com");
-        tree.insert("mail.example.com");
+        let _ = tree.insert("api.example.com");
+        let _ = tree.insert("www.example.com");
+        let _ = tree.insert("mail.example.com");
 
         // Verify children are accessible
         assert_eq!(
