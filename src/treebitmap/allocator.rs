@@ -124,7 +124,6 @@ impl<T: Sized> BucketVec<T> {
         }
     }
 
-
     pub fn set_slot_entry(&mut self, slot: u32, index: u32, value: T) {
         debug_assert!(slot.is_multiple_of(self.spacing));
         debug_assert!(index < self.spacing);
@@ -211,7 +210,6 @@ impl<T: Sized> BucketVec<T> {
 
         dst_slot
     }
-
 }
 
 static LEN2BUCKET: [u32; 33] = [
@@ -291,7 +289,6 @@ impl<T: Sized> Allocator<T> {
         }
     }
 
-
     pub fn alloc(&mut self, count: u32) -> AllocatorHandle {
         let bucket_index = choose_bucket(count) as usize;
         let slot = self.buckets[bucket_index].alloc_slot();
@@ -323,7 +320,6 @@ impl<T: Sized> Allocator<T> {
         let bucket_index = choose_bucket(hdl.len) as usize;
         self.buckets[bucket_index].get_slot_entry(hdl.offset, index)
     }
-
 
     pub fn insert(&mut self, hdl: &mut AllocatorHandle, index: u32, value: T) {
         let mut bucket_index = choose_bucket(hdl.len) as usize;

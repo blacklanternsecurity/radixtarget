@@ -38,7 +38,6 @@ fn ipnet_to_nibbles(network: &IpNet) -> (Vec<u8>, u32) {
     }
 }
 
-
 /// Fast tree-bitmap implementation for IP prefix lookups
 #[derive(Debug)]
 pub struct FastTreeBitmap {
@@ -187,13 +186,14 @@ impl<T: Sized> TreeBitmap<T> {
             let match_result = cur_node.match_segment(nibble);
 
             if let MatchResult::Chase(child_hdl, index) = match_result
-                && bits_left >= 4 {
-                    // follow existing branch
-                    bits_left -= 4;
-                    cur_hdl = child_hdl;
-                    cur_index = index;
-                    continue;
-                }
+                && bits_left >= 4
+            {
+                // follow existing branch
+                bits_left -= 4;
+                cur_hdl = child_hdl;
+                cur_index = index;
+                continue;
+            }
 
             let bitmap = node::gen_bitmap(nibble, cmp::min(4, bits_left));
 
