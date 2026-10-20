@@ -5,7 +5,8 @@ This module provides efficient storage and lookup of IP networks and DNS names
 using a Rust-based radix tree implementation for optimal performance.
 """
 
-from ._radixtarget import PyRadixTarget, py_host_size_key as host_size_key
+from ._radixtarget import PyRadixTarget
+from ._radixtarget import py_host_size_key as host_size_key
 from .radixtarget import RadixTarget
 
 # Alias for convenience
