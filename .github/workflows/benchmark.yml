@@ -3,31 +3,61 @@ name: Benchmark
 on:
   pull_request:
 
-permissions:
-  contents: read
-  pull-requests: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   benchmark:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out PR
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+
+      - name: Check out target branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          cache: false
 
-      - name: Build benchmark binary
-        run: cd benchmark && cargo build --release --bin benchmark
+      # Build the PR's harness against both sides so the measurements are
+      # identical, even when the PR changes the harness itself
+      - name: Use the PR's benchmark harness for the target branch
+        run: |
+          rm -rf base/benchmark
+          cp -r head/benchmark base/benchmark
 
-      - name: Run benchmark
-        run: cd benchmark && ./target/release/benchmark > ../benchmark_report.md
+      - name: Benchmark target branch
+        # e.g. fails if the PR changes the public API the harness uses
+        continue-on-error: true
+        working-directory: base/benchmark
+        run: |
+          cargo build --release --bin benchmark
+          ./target/release/benchmark run --output "$GITHUB_WORKSPACE/base.json"
 
-      - name: Display benchmark results
-        run: cat benchmark_report.md
+      - name: Benchmark PR
+        working-directory: head/benchmark
+        run: |
+          cargo build --release --bin benchmark
+          ./target/release/benchmark run --output "$GITHUB_WORKSPACE/head.json"
+
+      - name: Compare
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          BASE_ARGS=()
+          if [ -f base.json ]; then BASE_ARGS=(--base base.json); fi
+          head/benchmark/target/release/benchmark compare "${BASE_ARGS[@]}" --head head.json \
+            --base-label "$BASE_REF" --head-label "$HEAD_REF" > benchmark_report.md
+          cat benchmark_report.md
 
       - name: Upload benchmark results
         if: always()
@@ -36,12 +66,16 @@ jobs:
           name: benchmark-results
           path: |
             benchmark_report.md
-            benchmark_results.json
+            base.json
+            head.json
           retention-days: 30
 
       - name: Comment benchmark results on PR
-        # fork PRs get a read-only token and cannot comment
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        # fork and dependabot PRs get a read-only token and cannot comment
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |

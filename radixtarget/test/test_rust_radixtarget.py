@@ -963,8 +963,8 @@ def test_special_methods_coverage():
     assert repr(target1) == "RadixTarget(strict_scope=false, 2 hosts)"
 
     # Test __eq__ with non-RadixTarget (line 153)
-    assert (target1 == "not_a_target") is False
-    assert (target1 == 42) is False
+    assert target1 != "not_a_target"
+    assert target1 != 42
 
     # Test __hash__ (line 157)
     hash_val = hash(target1)

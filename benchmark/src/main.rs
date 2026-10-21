@@ -1,46 +1,75 @@
-use clap::Parser;
-use ip_network::IpNetwork;
-use ip_network_table::IpNetworkTable;
+use clap::{Parser, Subcommand};
 use radixtarget::{RadixTarget, ScopeMode};
 use rand::prelude::*;
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
-use std::str::FromStr;
+use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(Parser)]
 #[command(name = "radixtarget-benchmark")]
-#[command(about = "Benchmark RadixTarget performance")]
+#[command(about = "Benchmark RadixTarget performance, and compare two benchmark runs")]
 struct Args {
-    #[arg(short, long, default_value = "100000")]
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Benchmark the radixtarget this binary was built against
+    Run {
+        #[arg(short, long, default_value = "100000")]
+        size: usize,
+
+        #[arg(short, long, default_value = "100000")]
+        lookups: usize,
+
+        /// Repetitions per benchmark; the median time is reported
+        #[arg(short, long, default_value = "5")]
+        runs: usize,
+
+        /// Seed for the generated data, so separate runs use identical inputs
+        #[arg(long, default_value = "1337")]
+        seed: u64,
+
+        #[arg(short, long, default_value = "benchmark_results.json")]
+        output: PathBuf,
+    },
+    /// Print a markdown comparison of two `run` outputs
+    Compare {
+        /// Results for the target branch. If missing, only head results are shown
+        #[arg(long)]
+        base: Option<PathBuf>,
+
+        #[arg(long)]
+        head: PathBuf,
+
+        #[arg(long, default_value = "base")]
+        base_label: String,
+
+        #[arg(long, default_value = "head")]
+        head_label: String,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+struct Measurement {
+    name: String,
+    operations: usize,
+    median_time_ms: f64,
+    hit_rate: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Results {
     size: usize,
-
-    #[arg(short, long, default_value = "10000")]
     lookups: usize,
+    runs: usize,
+    seed: u64,
+    measurements: Vec<Measurement>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct InsertBenchmarkResult {
-    library: String,
-    ip_version: String,
-    networks_inserted: usize,
-    insert_time_ms: f64,
-    inserts_per_second: f64,
-}
-
-#[derive(Serialize, Deserialize)]
-struct LookupBenchmarkResult {
-    library: String,
-    ip_version: String,
-    networks_in_table: usize,
-    lookups_performed: usize,
-    lookup_time_ms: f64,
-    lookups_per_second: f64,
-    hit_rate: f64,
-}
-
-fn generate_ipv4_data(size: usize) -> Vec<String> {
-    let mut rng = thread_rng();
+fn generate_ipv4_data(rng: &mut StdRng, size: usize) -> Vec<String> {
     let mut ipv4_networks = Vec::new();
 
     // Generate IPv4 networks with proper network addresses
@@ -69,8 +98,7 @@ fn generate_ipv4_data(size: usize) -> Vec<String> {
     ipv4_networks
 }
 
-fn generate_ipv6_data(size: usize) -> Vec<String> {
-    let mut rng = thread_rng();
+fn generate_ipv6_data(rng: &mut StdRng, size: usize) -> Vec<String> {
     let mut ipv6_networks = Vec::new();
 
     // Generate IPv6 networks with proper network addresses
@@ -78,16 +106,7 @@ fn generate_ipv6_data(size: usize) -> Vec<String> {
         let prefix = rng.gen_range(1..=128);
 
         // Generate random IPv6 segments
-        let segments: [u16; 8] = [
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-        ];
+        let segments: [u16; 8] = rng.gen();
 
         // Apply the prefix mask to get the network address
         let mut network_segments = segments;
@@ -95,8 +114,8 @@ fn generate_ipv6_data(size: usize) -> Vec<String> {
         let remaining_bits = prefix % 16;
 
         // Zero out segments beyond the prefix
-        for i in (full_segments as usize + 1)..8 {
-            network_segments[i] = 0;
+        for segment in network_segments.iter_mut().skip(full_segments as usize + 1) {
+            *segment = 0;
         }
 
         // Apply partial mask to the segment that straddles the prefix boundary
@@ -117,159 +136,88 @@ fn generate_ipv6_data(size: usize) -> Vec<String> {
     ipv6_networks
 }
 
-fn generate_ipv4_lookup_ips(lookup_count: usize) -> Vec<String> {
-    let mut rng = thread_rng();
-    let mut lookup_ips = Vec::new();
-
-    // Generate completely random IPv4 lookups
-    for _ in 0..lookup_count {
-        let a = rng.gen_range(1..=255);
-        let b = rng.gen_range(0..=255);
-        let c = rng.gen_range(0..=255);
-        let d = rng.gen_range(1..=254);
-        lookup_ips.push(format!("{}.{}.{}.{}", a, b, c, d));
-    }
-
-    lookup_ips
+fn generate_ipv4_lookup_ips(rng: &mut StdRng, lookup_count: usize) -> Vec<String> {
+    (0..lookup_count)
+        .map(|_| {
+            format!(
+                "{}.{}.{}.{}",
+                rng.gen_range(1..=255),
+                rng.gen_range(0..=255),
+                rng.gen_range(0..=255),
+                rng.gen_range(1..=254)
+            )
+        })
+        .collect()
 }
 
-fn generate_ipv6_lookup_ips(lookup_count: usize) -> Vec<String> {
-    let mut rng = thread_rng();
-    let mut lookup_ips = Vec::new();
-
-    // Generate completely random IPv6 lookups
-    for _ in 0..lookup_count {
-        let segments: Vec<String> = (0..8).map(|_| format!("{:x}", rng.gen::<u16>())).collect();
-        lookup_ips.push(segments.join(":"));
-    }
-
-    lookup_ips
+fn generate_ipv6_lookup_ips(rng: &mut StdRng, lookup_count: usize) -> Vec<String> {
+    (0..lookup_count)
+        .map(|_| {
+            let segments: Vec<String> = (0..8).map(|_| format!("{:x}", rng.gen::<u16>())).collect();
+            segments.join(":")
+        })
+        .collect()
 }
 
-fn benchmark_radixtarget_insert(networks: &[String], ip_version: &str) -> InsertBenchmarkResult {
-    let start = Instant::now();
-    let mut rt = RadixTarget::new(&[], ScopeMode::Normal).expect("Failed to create RadixTarget");
-
-    for network in networks {
-        let _ = rt.insert(network);
-    }
-
-    let insert_time = start.elapsed();
-    let inserts_per_sec = networks.len() as f64 / insert_time.as_secs_f64();
-
-    InsertBenchmarkResult {
-        library: "radixtarget".to_string(),
-        ip_version: ip_version.to_string(),
-        networks_inserted: networks.len(),
-        insert_time_ms: insert_time.as_secs_f64() * 1000.0,
-        inserts_per_second: inserts_per_sec,
-    }
+fn median(mut times: Vec<f64>) -> f64 {
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    times[times.len() / 2]
 }
 
-fn benchmark_radixtarget_lookup(
-    networks: &[String],
-    lookup_ips: &[String],
-    ip_version: &str,
-) -> LookupBenchmarkResult {
-    // First build the radix tree
+fn build_target(networks: &[String]) -> RadixTarget {
     let mut rt = RadixTarget::new(&[], ScopeMode::Normal).expect("Failed to create RadixTarget");
     for network in networks {
         let _ = rt.insert(network);
     }
+    rt
+}
 
-    // Benchmark lookups
-    let start = Instant::now();
-    let mut hits = 0;
+fn benchmark_insert(name: &str, networks: &[String], runs: usize) -> Measurement {
+    let times = (0..runs)
+        .map(|_| {
+            let start = Instant::now();
+            let rt = build_target(networks);
+            let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+            // Freeing the tree isn't part of insert time
+            drop(rt);
+            elapsed
+        })
+        .collect();
 
-    for lookup in lookup_ips {
-        if rt.get(lookup).is_some() {
-            hits += 1;
-        }
-    }
-
-    let lookup_time = start.elapsed();
-    let lookups_per_sec = lookup_ips.len() as f64 / lookup_time.as_secs_f64();
-    let hit_rate = hits as f64 / lookup_ips.len() as f64;
-
-    LookupBenchmarkResult {
-        library: "radixtarget".to_string(),
-        ip_version: ip_version.to_string(),
-        networks_in_table: networks.len(),
-        lookups_performed: lookup_ips.len(),
-        lookup_time_ms: lookup_time.as_secs_f64() * 1000.0,
-        lookups_per_second: lookups_per_sec,
-        hit_rate,
+    Measurement {
+        name: name.to_string(),
+        operations: networks.len(),
+        median_time_ms: median(times),
+        hit_rate: None,
     }
 }
 
-fn benchmark_ip_network_table_insert(
-    networks: &[String],
-    ip_version: &str,
-) -> InsertBenchmarkResult {
-    let start = Instant::now();
-    let mut table: IpNetworkTable<String> = IpNetworkTable::new();
-
-    for network in networks {
-        if let Ok(ip_network) = IpNetwork::from_str(network) {
-            table.insert(ip_network, network.clone());
-        }
-    }
-
-    let insert_time = start.elapsed();
-    let inserts_per_sec = networks.len() as f64 / insert_time.as_secs_f64();
-
-    InsertBenchmarkResult {
-        library: "ip_network_table".to_string(),
-        ip_version: ip_version.to_string(),
-        networks_inserted: networks.len(),
-        insert_time_ms: insert_time.as_secs_f64() * 1000.0,
-        inserts_per_second: inserts_per_sec,
-    }
-}
-
-fn benchmark_ip_network_table_lookup(
+fn benchmark_lookup(
+    name: &str,
     networks: &[String],
     lookup_ips: &[String],
-    ip_version: &str,
-) -> LookupBenchmarkResult {
-    // First build the table
-    let mut table: IpNetworkTable<String> = IpNetworkTable::new();
-    for network in networks {
-        if let Ok(ip_network) = IpNetwork::from_str(network) {
-            table.insert(ip_network, network.clone());
-        }
-    }
-
-    // Convert string IPs to IpAddr for ip_network_table
-    let mut parsed_lookup_ips = Vec::new();
-    for ip_str in lookup_ips {
-        if let Ok(ip_addr) = IpAddr::from_str(ip_str) {
-            parsed_lookup_ips.push(ip_addr);
-        }
-    }
-
-    // Benchmark lookups
-    let start = Instant::now();
+    runs: usize,
+) -> Measurement {
+    let rt = build_target(networks);
     let mut hits = 0;
+    let times = (0..runs)
+        .map(|_| {
+            hits = 0;
+            let start = Instant::now();
+            for lookup in lookup_ips {
+                if rt.get(lookup).is_some() {
+                    hits += 1;
+                }
+            }
+            start.elapsed().as_secs_f64() * 1000.0
+        })
+        .collect();
 
-    for lookup in &parsed_lookup_ips {
-        if table.longest_match(*lookup).is_some() {
-            hits += 1;
-        }
-    }
-
-    let lookup_time = start.elapsed();
-    let lookups_per_sec = parsed_lookup_ips.len() as f64 / lookup_time.as_secs_f64();
-    let hit_rate = hits as f64 / parsed_lookup_ips.len() as f64;
-
-    LookupBenchmarkResult {
-        library: "ip_network_table".to_string(),
-        ip_version: ip_version.to_string(),
-        networks_in_table: networks.len(),
-        lookups_performed: parsed_lookup_ips.len(),
-        lookup_time_ms: lookup_time.as_secs_f64() * 1000.0,
-        lookups_per_second: lookups_per_sec,
-        hit_rate,
+    Measurement {
+        name: name.to_string(),
+        operations: lookup_ips.len(),
+        median_time_ms: median(times),
+        hit_rate: Some(hits as f64 / lookup_ips.len() as f64),
     }
 }
 
@@ -277,7 +225,7 @@ fn accuracy_test() -> bool {
     println!("Running accuracy test...");
 
     // Test cases: networks and expected matches
-    let test_networks = vec![
+    let test_networks = [
         "192.168.1.0/24",
         "192.168.1.0/25", // More specific than above
         "10.0.0.0/8",
@@ -287,7 +235,7 @@ fn accuracy_test() -> bool {
         "2001:db8:1::/48", // More specific than above
     ];
 
-    let test_cases = vec![
+    let test_cases = [
         ("192.168.1.100", Some("192.168.1.0/25")), // Should match most specific
         ("192.168.1.200", Some("192.168.1.0/24")), // Should match less specific (outside /25)
         ("10.1.1.50", Some("10.1.1.0/24")),        // Should match most specific
@@ -299,226 +247,142 @@ fn accuracy_test() -> bool {
         ("2001:db9::1", None),                     // Should not match anything
     ];
 
-    // Test RadixTarget
-    let mut rt = RadixTarget::new(&[], ScopeMode::Normal).expect("Failed to create RadixTarget");
-    for network in &test_networks {
-        let _ = rt.insert(network);
-    }
-
-    // Test ip_network_table
-    let mut table: IpNetworkTable<String> = IpNetworkTable::new();
-    for network in &test_networks {
-        if let Ok(ip_network) = IpNetwork::from_str(network) {
-            table.insert(ip_network, network.to_string());
-        }
-    }
+    let rt = build_target(
+        &test_networks
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+    );
 
     let mut all_passed = true;
-
     for (test_ip, expected) in &test_cases {
-        // Test RadixTarget
-        let rt_result = rt.get(test_ip);
-        let rt_result_str = rt_result.as_ref().map(|s| s.as_str());
-
-        // Test ip_network_table
-        let table_result = if let Ok(ip_addr) = IpAddr::from_str(test_ip) {
-            table.longest_match(ip_addr)
+        let result = rt.get(test_ip);
+        if result.as_deref() == *expected {
+            println!("  PASS: {} -> {:?}", test_ip, expected);
         } else {
-            None
-        };
-        let table_result_str = table_result.as_ref().map(|(_, network)| network.as_str());
-
-        let passed = rt_result_str == *expected && table_result_str == *expected;
-
-        if !passed {
             println!(
-                "  FAIL: {} - Expected: {:?}, RadixTarget: {:?}, ip_network_table: {:?}",
-                test_ip, expected, rt_result_str, table_result_str
+                "  FAIL: {} - Expected: {:?}, got: {:?}",
+                test_ip, expected, result
             );
             all_passed = false;
-        } else {
-            println!("  PASS: {} -> {:?}", test_ip, expected);
         }
-    }
-
-    if all_passed {
-        println!("✓ All accuracy tests passed!");
-    } else {
-        println!("✗ Some accuracy tests failed!");
     }
 
     all_passed
 }
 
-fn main() {
-    let args = Args::parse();
-
-    // Run accuracy test first
+fn run(size: usize, lookups: usize, runs: usize, seed: u64, output: PathBuf) {
     if !accuracy_test() {
-        println!("Accuracy test failed! Aborting benchmark.");
+        eprintln!("Accuracy test failed! Aborting benchmark.");
         std::process::exit(1);
     }
-    println!();
 
-    println!("Generating {} IPv4 networks...", args.size);
-    let ipv4_networks = generate_ipv4_data(args.size);
-    let ipv4_lookup_ips = generate_ipv4_lookup_ips(args.lookups);
+    let mut rng = StdRng::seed_from_u64(seed);
+    let ipv4_networks = generate_ipv4_data(&mut rng, size);
+    let ipv4_lookup_ips = generate_ipv4_lookup_ips(&mut rng, lookups);
+    let ipv6_networks = generate_ipv6_data(&mut rng, size);
+    let ipv6_lookup_ips = generate_ipv6_lookup_ips(&mut rng, lookups);
 
-    println!("Generating {} IPv6 networks...", args.size);
-    let ipv6_networks = generate_ipv6_data(args.size);
-    let ipv6_lookup_ips = generate_ipv6_lookup_ips(args.lookups);
+    println!("Running benchmarks ({} runs each)...", runs);
+    let measurements = vec![
+        benchmark_insert("IPv4 insert", &ipv4_networks, runs),
+        benchmark_lookup("IPv4 lookup", &ipv4_networks, &ipv4_lookup_ips, runs),
+        benchmark_insert("IPv6 insert", &ipv6_networks, runs),
+        benchmark_lookup("IPv6 lookup", &ipv6_networks, &ipv6_lookup_ips, runs),
+    ];
+    for m in &measurements {
+        println!("  {}: {:.2} ms", m.name, m.median_time_ms);
+    }
 
-    println!("Running IPv4 insert benchmarks...");
-    let ipv4_radixtarget_insert = benchmark_radixtarget_insert(&ipv4_networks, "IPv4");
-    let ipv4_ip_network_table_insert = benchmark_ip_network_table_insert(&ipv4_networks, "IPv4");
+    let results = Results {
+        size,
+        lookups,
+        runs,
+        seed,
+        measurements,
+    };
+    std::fs::write(&output, serde_json::to_string_pretty(&results).unwrap()).unwrap();
+    println!("Results saved to {}", output.display());
+}
 
-    println!("Running IPv4 lookup benchmarks...");
-    let ipv4_radixtarget_lookup =
-        benchmark_radixtarget_lookup(&ipv4_networks, &ipv4_lookup_ips, "IPv4");
-    let ipv4_ip_network_table_lookup =
-        benchmark_ip_network_table_lookup(&ipv4_networks, &ipv4_lookup_ips, "IPv4");
+fn load(path: &PathBuf) -> Results {
+    let data = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("reading {}: {}", path.display(), e));
+    serde_json::from_str(&data).unwrap_or_else(|e| panic!("parsing {}: {}", path.display(), e))
+}
 
-    println!("Running IPv6 insert benchmarks...");
-    let ipv6_radixtarget_insert = benchmark_radixtarget_insert(&ipv6_networks, "IPv6");
-    let ipv6_ip_network_table_insert = benchmark_ip_network_table_insert(&ipv6_networks, "IPv6");
-
-    println!("Running IPv6 lookup benchmarks...");
-    let ipv6_radixtarget_lookup =
-        benchmark_radixtarget_lookup(&ipv6_networks, &ipv6_lookup_ips, "IPv6");
-    let ipv6_ip_network_table_lookup =
-        benchmark_ip_network_table_lookup(&ipv6_networks, &ipv6_lookup_ips, "IPv6");
+fn compare(base: Option<PathBuf>, head: PathBuf, base_label: String, head_label: String) {
+    let head = load(&head);
+    let base = base.map(|p| load(&p));
 
     println!("## RadixTarget Benchmark Results");
     println!();
-
-    println!("### IPv4 Insert Performance");
-    println!();
-    println!("| Library | Networks | Time (ms) | Inserts/sec | Speed vs RadixTarget |");
-    println!("| ------- | -------- | --------- | ----------- | -------------------- |");
     println!(
-        "| RadixTarget | {} | {:.2} | {:.0} | 1.0x |",
-        ipv4_radixtarget_insert.networks_inserted,
-        ipv4_radixtarget_insert.insert_time_ms,
-        ipv4_radixtarget_insert.inserts_per_second
-    );
-
-    let ipv4_insert_speedup = ipv4_ip_network_table_insert.inserts_per_second
-        / ipv4_radixtarget_insert.inserts_per_second;
-    let ipv4_insert_comparison = format!("{:.1}x", ipv4_insert_speedup);
-
-    println!(
-        "| ip_network_table | {} | {:.2} | {:.0} | {} |",
-        ipv4_ip_network_table_insert.networks_inserted,
-        ipv4_ip_network_table_insert.insert_time_ms,
-        ipv4_ip_network_table_insert.inserts_per_second,
-        ipv4_insert_comparison
+        "{} networks per table, {} lookups, median of {} runs (seed {}).",
+        head.size, head.lookups, head.runs, head.seed
     );
     println!();
 
-    println!("### IPv4 Lookup Performance");
-    println!();
-    println!("| Library | Networks in Table | Lookups | Time (ms) | Lookups/sec | Hit Rate | Speed vs RadixTarget |");
-    println!("| ------- | ----------------- | ------- | --------- | ----------- | -------- | -------------------- |");
-    println!(
-        "| RadixTarget | {} | {} | {:.2} | {:.0} | {:.1}% | 1.0x |",
-        ipv4_radixtarget_lookup.networks_in_table,
-        ipv4_radixtarget_lookup.lookups_performed,
-        ipv4_radixtarget_lookup.lookup_time_ms,
-        ipv4_radixtarget_lookup.lookups_per_second,
-        ipv4_radixtarget_lookup.hit_rate * 100.0
-    );
-
-    let ipv4_lookup_speedup = ipv4_ip_network_table_lookup.lookups_per_second
-        / ipv4_radixtarget_lookup.lookups_per_second;
-    let ipv4_lookup_comparison = format!("{:.1}x", ipv4_lookup_speedup);
-
-    println!(
-        "| ip_network_table | {} | {} | {:.2} | {:.0} | {:.1}% | {} |",
-        ipv4_ip_network_table_lookup.networks_in_table,
-        ipv4_ip_network_table_lookup.lookups_performed,
-        ipv4_ip_network_table_lookup.lookup_time_ms,
-        ipv4_ip_network_table_lookup.lookups_per_second,
-        ipv4_ip_network_table_lookup.hit_rate * 100.0,
-        ipv4_lookup_comparison
-    );
-    println!();
-
-    println!("### IPv6 Insert Performance");
-    println!();
-    println!("| Library | Networks | Time (ms) | Inserts/sec | Speed vs RadixTarget |");
-    println!("| ------- | -------- | --------- | ----------- | -------------------- |");
-    println!(
-        "| RadixTarget | {} | {:.2} | {:.0} | 1.0x |",
-        ipv6_radixtarget_insert.networks_inserted,
-        ipv6_radixtarget_insert.insert_time_ms,
-        ipv6_radixtarget_insert.inserts_per_second
-    );
-
-    let ipv6_insert_speedup = ipv6_ip_network_table_insert.inserts_per_second
-        / ipv6_radixtarget_insert.inserts_per_second;
-    let ipv6_insert_comparison = format!("{:.1}x", ipv6_insert_speedup);
-
-    println!(
-        "| ip_network_table | {} | {:.2} | {:.0} | {} |",
-        ipv6_ip_network_table_insert.networks_inserted,
-        ipv6_ip_network_table_insert.insert_time_ms,
-        ipv6_ip_network_table_insert.inserts_per_second,
-        ipv6_insert_comparison
-    );
-    println!();
-
-    println!("### IPv6 Lookup Performance");
-    println!();
-    println!("| Library | Networks in Table | Lookups | Time (ms) | Lookups/sec | Hit Rate | Speed vs RadixTarget |");
-    println!("| ------- | ----------------- | ------- | --------- | ----------- | -------- | -------------------- |");
-    println!(
-        "| RadixTarget | {} | {} | {:.2} | {:.0} | {:.1}% | 1.0x |",
-        ipv6_radixtarget_lookup.networks_in_table,
-        ipv6_radixtarget_lookup.lookups_performed,
-        ipv6_radixtarget_lookup.lookup_time_ms,
-        ipv6_radixtarget_lookup.lookups_per_second,
-        ipv6_radixtarget_lookup.hit_rate * 100.0
-    );
-
-    let ipv6_lookup_speedup = ipv6_ip_network_table_lookup.lookups_per_second
-        / ipv6_radixtarget_lookup.lookups_per_second;
-    let ipv6_lookup_comparison = format!("{:.1}x", ipv6_lookup_speedup);
-
-    println!(
-        "| ip_network_table | {} | {} | {:.2} | {:.0} | {:.1}% | {} |",
-        ipv6_ip_network_table_lookup.networks_in_table,
-        ipv6_ip_network_table_lookup.lookups_performed,
-        ipv6_ip_network_table_lookup.lookup_time_ms,
-        ipv6_ip_network_table_lookup.lookups_per_second,
-        ipv6_ip_network_table_lookup.hit_rate * 100.0,
-        ipv6_lookup_comparison
-    );
-    println!();
-
-    // Save results
-    #[derive(Serialize)]
-    struct AllResults {
-        insert_results: Vec<InsertBenchmarkResult>,
-        lookup_results: Vec<LookupBenchmarkResult>,
+    match base {
+        Some(base) => {
+            println!(
+                "| Benchmark | {} (ms) | {} (ms) | Change |",
+                base_label, head_label
+            );
+            println!("| --------- | ---: | ---: | ---: |");
+            for h in &head.measurements {
+                match base.measurements.iter().find(|b| b.name == h.name) {
+                    Some(b) => {
+                        let change =
+                            (h.median_time_ms - b.median_time_ms) / b.median_time_ms * 100.0;
+                        // Shared CI runners are noisy; only flag changes beyond 10%
+                        let marker = if change <= -10.0 {
+                            "🟢 "
+                        } else if change >= 10.0 {
+                            "🔴 "
+                        } else {
+                            ""
+                        };
+                        println!(
+                            "| {} | {:.2} | {:.2} | {}{:+.1}% |",
+                            h.name, b.median_time_ms, h.median_time_ms, marker, change
+                        );
+                    }
+                    None => println!("| {} | n/a | {:.2} | new |", h.name, h.median_time_ms),
+                }
+            }
+            println!();
+            println!("Change is in time taken: negative is faster.");
+        }
+        None => {
+            println!(
+                "> Could not benchmark `{}`, so there is nothing to compare against.",
+                base_label
+            );
+            println!();
+            println!("| Benchmark | {} (ms) |", head_label);
+            println!("| --------- | ---: |");
+            for h in &head.measurements {
+                println!("| {} | {:.2} |", h.name, h.median_time_ms);
+            }
+        }
     }
+}
 
-    let all_results = AllResults {
-        insert_results: vec![
-            ipv4_radixtarget_insert,
-            ipv4_ip_network_table_insert,
-            ipv6_radixtarget_insert,
-            ipv6_ip_network_table_insert,
-        ],
-        lookup_results: vec![
-            ipv4_radixtarget_lookup,
-            ipv4_ip_network_table_lookup,
-            ipv6_radixtarget_lookup,
-            ipv6_ip_network_table_lookup,
-        ],
-    };
-
-    if let Ok(json) = serde_json::to_string_pretty(&all_results) {
-        std::fs::write("benchmark_results.json", json).unwrap();
-        println!("*Results saved to benchmark_results.json*");
+fn main() {
+    match Args::parse().command {
+        Command::Run {
+            size,
+            lookups,
+            runs,
+            seed,
+            output,
+        } => run(size, lookups, runs, seed, output),
+        Command::Compare {
+            base,
+            head,
+            base_label,
+            head_label,
+        } => compare(base, head, base_label, head_label),
     }
 }
