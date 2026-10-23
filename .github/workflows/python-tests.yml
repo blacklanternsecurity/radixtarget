@@ -1,10 +1,11 @@
 name: Python tests
 
 on:
-  push:
-    branches: [stable]
   pull_request:
   workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -15,8 +16,23 @@ concurrency:
 
 jobs:
   python:
-    uses: blacklanternsecurity/CLA/.github/workflows/python-tests.yml@40c6e18c0a6e32116eea4f89fc826f53c70889dc # 2026-10-07
+    uses: blacklanternsecurity/CLA/.github/workflows/python-tests.yml@07e14bcbba5e737e1b29bd9e3f9128fbf2483be9 # CLA#11
     with:
       pytest-args: --exitfirst --disable-warnings --log-cli-level=DEBUG --cov-report xml:cov.xml --cov=radixtarget .
       coverage: true
-    secrets: inherit
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Reports the contexts the default branch ruleset requires today. Remove once it requires python / passed.
+  required:
+    name: ${{ matrix.context }}
+    if: always()
+    needs: python
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        context: ["test (3.11)", "test (3.12)", "test (3.13)", "test (3.14)", "test (3.15)"]
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}

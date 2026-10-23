@@ -1,8 +1,6 @@
 name: Rust tests
 
 on:
-  push:
-    branches: [stable]
   pull_request:
   workflow_call:
 
@@ -15,6 +13,6 @@ concurrency:
 
 jobs:
   rust:
-    uses: blacklanternsecurity/CLA/.github/workflows/rust-tests.yml@40c6e18c0a6e32116eea4f89fc826f53c70889dc # 2026-10-07
+    uses: blacklanternsecurity/CLA/.github/workflows/rust-tests.yml@07e14bcbba5e737e1b29bd9e3f9128fbf2483be9 # CLA#11
     with:
       cargo-args: --all-features --locked
