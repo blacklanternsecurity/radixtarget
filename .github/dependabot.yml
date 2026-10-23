@@ -1,22 +1,55 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
 updates:
-  - package-ecosystem: "uv"
-    directory: "/"
+  - package-ecosystem: "cargo"
+    directories:
+      - "/"
+      - "/benchmark"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
-    open-pull-requests-limit: 10
-  - package-ecosystem: github-actions
-    directory: /
     groups:
-      github-actions:
+      cargo-minor-patch:
         patterns:
-          - "*"  # Group all Actions updates into a single larger pull request
-    schedule:
-      interval: weekly
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      cargo-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+  - package-ecosystem: "uv"
+    directory: "/"
     target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    groups:
+      uv-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      uv-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      github-actions-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
