@@ -1,10 +1,10 @@
 # RadixTarget
 
-[![Python Version](https://img.shields.io/badge/python-3.9+-blue)](https://www.python.org)
+[![Python Version](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org)
 [![PyPI](https://img.shields.io/pypi/v/radixtarget)](https://pypi.org/project/radixtarget/)
 [![Rust Version](https://img.shields.io/badge/rust-1.70+-orange)](https://www.rust-lang.org)
 [![Crates.io](https://img.shields.io/crates/v/radixtarget?color=orange)](https://crates.io/crates/radixtarget)
-[![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/blacklanternsecurity/radixtarget/blob/stable/LICENSE)
+[![License](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Rust Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml/badge.svg?branch=stable)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/rust-tests.yml)
 [![Python Tests](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml/badge.svg?branch=stable)](https://github.com/blacklanternsecurity/radixtarget/actions/workflows/python-tests.yml)
