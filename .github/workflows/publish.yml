@@ -4,8 +4,7 @@ on:
   push:
     branches: [stable]
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -13,22 +12,32 @@ concurrency:
 
 jobs:
   check:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     uses: blacklanternsecurity/CLA/.github/workflows/release-check.yml@07e14bcbba5e737e1b29bd9e3f9128fbf2483be9 # CLA#11
 
   rust:
     needs: check
     if: needs.check.outputs.release == 'true'
+    permissions:
+      contents: read
     uses: ./.github/workflows/rust-tests.yml
 
   python:
     needs: check
     if: needs.check.outputs.release == 'true'
+    permissions:
+      contents: read
     uses: ./.github/workflows/python-tests.yml
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   wheels:
     needs: [rust, python]
+    permissions:
+      contents: read
     uses: blacklanternsecurity/CLA/.github/workflows/maturin-wheels.yml@07e14bcbba5e737e1b29bd9e3f9128fbf2483be9 # CLA#11
     with:
       manylinux: auto
@@ -38,6 +47,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release
     permissions:
+      contents: read
       id-token: write
       attestations: write
     steps:
