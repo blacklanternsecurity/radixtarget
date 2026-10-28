@@ -8,15 +8,15 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - run: |
-          pipx install ruff
+          pipx install ruff==0.16.9
           ruff check
   test:
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # 2026-09-03, no release tag
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v7
       - name: Install dependencies
@@ -42,7 +42,7 @@ jobs:
           files: ./cov.xml
           verbose: true
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     steps:
@@ -52,7 +52,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # 2026-09-03, no release tag
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
       - name: Build PyPi package
@@ -137,9 +137,9 @@ jobs:
     strategy:
       matrix:
         platform:
-          - runner: windows-latest
+          - runner: windows-2025
             target: x64
-          - runner: windows-latest
+          - runner: windows-2025
             target: x86
     steps:
       - uses: actions/checkout@v6
@@ -174,7 +174,7 @@ jobs:
         platform:
           - runner: macos-15-intel
             target: x86_64
-          - runner: macos-latest
+          - runner: macos-15
             target: aarch64
     steps:
       - uses: actions/checkout@v6
@@ -200,7 +200,7 @@ jobs:
           path: dist
 
   sdist:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     steps:
@@ -218,7 +218,7 @@ jobs:
 
   release:
     name: Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [linux, musllinux, windows, macos, sdist]
     if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     permissions:

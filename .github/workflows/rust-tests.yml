@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     
     steps:
       - uses: actions/checkout@v6
@@ -15,7 +15,8 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
+          components: clippy, rustfmt
           override: true
           profile: minimal
       
@@ -41,7 +42,7 @@ jobs:
 
   publish:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/stable'
     
     steps:
@@ -50,7 +51,8 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
+          components: clippy, rustfmt
           override: true
           profile: minimal
       
