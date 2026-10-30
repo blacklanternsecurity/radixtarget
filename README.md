@@ -38,27 +38,27 @@ rt = RadixTarget()
 
 # IPv4
 rt.add("192.168.1.0/24")
-rt.get("192.168.1.10") # IPv4Network("192.168.1.0/24")
-rt.get("192.168.2.10") # None
+rt.get("192.168.1.10")  # IPv4Network("192.168.1.0/24")
+rt.get("192.168.2.10")  # None
 
 # IPv6
 rt.add("dead::/64")
-rt.get("dead::beef") # IPv6Network("dead::/64")
-rt.get("dead:cafe::beef") # None
+rt.get("dead::beef")  # IPv6Network("dead::/64")
+rt.get("dead:cafe::beef")  # None
 
 # DNS
 rt.add("net")
 rt.add("www.example.com")
 rt.add("test.www.example.com")
-rt.get("net") # "net"
-rt.get("evilcorp.net") # "net"
-rt.get("www.example.com") # "www.example.com"
-rt.get("asdf.test.www.example.com") # "test.www.example.com"
-rt.get("example.com") # None
+rt.get("net")  # "net"
+rt.get("evilcorp.net")  # "net"
+rt.get("www.example.com")  # "www.example.com"
+rt.get("asdf.test.www.example.com")  # "test.www.example.com"
+rt.get("example.com")  # None
 
 # Custom data nodes
 rt.add("evilcorp.co.uk", "custom_data")
-rt.get("www.evilcorp.co.uk") # "custom_data"
+rt.get("www.evilcorp.co.uk")  # "custom_data"
 
 # Insertion returns unique identifier
 insertion_id = rt.insert("10.0.0.1/8")
@@ -211,3 +211,11 @@ cargo fmt --all -- --check
 # Python linting
 uv run ruff check && uv run ruff format
 ```
+
+## Releasing
+
+A release is a reviewed pull request into `stable` that bumps the version in `Cargo.toml`. The merge starts `publish.yml`, which tests and builds, then publishes to PyPI and crates.io and creates the `v<version>` tag and the GitHub release. See the org [publishing policy](https://github.com/blacklanternsecurity/.github/blob/main/standards/releases.md).
+
+Each job that touches a credential runs in the `release` environment, so one release asks a `bbot-leads` member to approve four times: release-check's `credentials` job, `pypi`, `crates`, and the GitHub release.
+
+Wheels are built for released CPython in its default build only. PyPy and free-threaded (`t`) interpreters install from the sdist, which needs a Rust toolchain.
