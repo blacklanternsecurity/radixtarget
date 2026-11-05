@@ -326,8 +326,7 @@ mod tests {
 
         // Shuffle randomly
         use rand::seq::SliceRandom;
-        use rand::thread_rng;
-        hosts.shuffle(&mut thread_rng());
+        hosts.shuffle(&mut rand::rng());
 
         for host in &hosts {
             let _ = tree.insert(host);

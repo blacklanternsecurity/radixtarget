@@ -231,14 +231,15 @@ mod tests {
 
     /// Random networks packed into a small space so they overlap often.
     fn random_net(rng: &mut rand::rngs::StdRng) -> IpNet {
-        use rand::Rng;
-        if rng.gen_bool(0.5) {
-            let addr = std::net::Ipv4Addr::from(0x0a00_0000 | rng.gen_range(0..=0xffffu32));
-            IpNet::V4(ipnet::Ipv4Net::new(addr, rng.gen_range(12..=32)).unwrap()).trunc()
+        use rand::RngExt;
+        if rng.random_bool(0.5) {
+            let addr = std::net::Ipv4Addr::from(0x0a00_0000 | rng.random_range(0..=0xffffu32));
+            IpNet::V4(ipnet::Ipv4Net::new(addr, rng.random_range(12..=32)).unwrap()).trunc()
         } else {
-            let addr =
-                std::net::Ipv6Addr::from((0x2001_0db8u128 << 96) | rng.gen_range(0..=0xffffu128));
-            IpNet::V6(ipnet::Ipv6Net::new(addr, rng.gen_range(108..=128)).unwrap()).trunc()
+            let addr = std::net::Ipv6Addr::from(
+                (0x2001_0db8u128 << 96) | rng.random_range(0..=0xffffu128),
+            );
+            IpNet::V6(ipnet::Ipv6Net::new(addr, rng.random_range(108..=128)).unwrap()).trunc()
         }
     }
 
@@ -268,7 +269,7 @@ mod tests {
 
     #[test]
     fn test_matches_reference_tree() {
-        use rand::{Rng, SeedableRng};
+        use rand::{RngExt, SeedableRng};
         for acl_mode in [false, true] {
             for seed in 0..20 {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
@@ -276,7 +277,7 @@ mod tests {
                 let mut reference = Reference::new(acl_mode);
                 for _ in 0..2000 {
                     let net = random_net(&mut rng);
-                    match rng.gen_range(0..10) {
+                    match rng.random_range(0..10) {
                         0..=3 => assert_eq!(
                             fast.insert(net),
                             reference.tree(&net).insert(net),

@@ -24,4 +24,4 @@ default = []
 py = ["dep:pyo3"]
 
 [dev-dependencies]
-rand = "0.8"
+rand = "0.10"
