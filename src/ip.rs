@@ -797,8 +797,7 @@ mod tests {
 
         // Shuffle randomly
         use rand::seq::SliceRandom;
-        use rand::thread_rng;
-        networks.shuffle(&mut thread_rng());
+        networks.shuffle(&mut rand::rng());
 
         for net_str in &networks {
             let net = IpNet::from_str(net_str).unwrap();

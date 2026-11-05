@@ -74,13 +74,13 @@ fn generate_ipv4_data(rng: &mut StdRng, size: usize) -> Vec<String> {
 
     // Generate IPv4 networks with proper network addresses
     for _ in 0..size {
-        let prefix = rng.gen_range(1..=32);
+        let prefix = rng.random_range(1..=32);
 
         // Generate a random IP and normalize it to the network address
-        let a = rng.gen_range(1..=255);
-        let b = rng.gen_range(0..=255);
-        let c = rng.gen_range(0..=255);
-        let d = rng.gen_range(0..=255);
+        let a = rng.random_range(1..=255);
+        let b = rng.random_range(0..=255);
+        let c = rng.random_range(0..=255);
+        let d = rng.random_range(0..=255);
 
         // Create the IP and apply the subnet mask to get the network address
         let ip = (a as u32) << 24 | (b as u32) << 16 | (c as u32) << 8 | (d as u32);
@@ -103,10 +103,10 @@ fn generate_ipv6_data(rng: &mut StdRng, size: usize) -> Vec<String> {
 
     // Generate IPv6 networks with proper network addresses
     for _ in 0..size {
-        let prefix = rng.gen_range(1..=128);
+        let prefix = rng.random_range(1..=128);
 
         // Generate random IPv6 segments
-        let segments: [u16; 8] = rng.gen();
+        let segments: [u16; 8] = rng.random();
 
         // Apply the prefix mask to get the network address
         let mut network_segments = segments;
@@ -141,10 +141,10 @@ fn generate_ipv4_lookup_ips(rng: &mut StdRng, lookup_count: usize) -> Vec<String
         .map(|_| {
             format!(
                 "{}.{}.{}.{}",
-                rng.gen_range(1..=255),
-                rng.gen_range(0..=255),
-                rng.gen_range(0..=255),
-                rng.gen_range(1..=254)
+                rng.random_range(1..=255),
+                rng.random_range(0..=255),
+                rng.random_range(0..=255),
+                rng.random_range(1..=254)
             )
         })
         .collect()
@@ -153,7 +153,9 @@ fn generate_ipv4_lookup_ips(rng: &mut StdRng, lookup_count: usize) -> Vec<String
 fn generate_ipv6_lookup_ips(rng: &mut StdRng, lookup_count: usize) -> Vec<String> {
     (0..lookup_count)
         .map(|_| {
-            let segments: Vec<String> = (0..8).map(|_| format!("{:x}", rng.gen::<u16>())).collect();
+            let segments: Vec<String> = (0..8)
+                .map(|_| format!("{:x}", rng.random::<u16>()))
+                .collect();
             segments.join(":")
         })
         .collect()
