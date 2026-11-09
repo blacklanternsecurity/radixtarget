@@ -25,14 +25,14 @@ jobs:
     if: needs.check.outputs.release == 'true'
     permissions:
       contents: read
-    uses: ./.github/workflows/rust-tests.yml
+    uses: ./.github/workflows/rust-tests.yml # zizmor: ignore[self-repository]
 
   python:
     needs: check
     if: needs.check.outputs.release == 'true'
     permissions:
       contents: read
-    uses: ./.github/workflows/python-tests.yml
+    uses: ./.github/workflows/python-tests.yml # zizmor: ignore[self-repository]
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
