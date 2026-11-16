@@ -8,4 +8,4 @@ permissions:
 
 jobs:
   dev-security:
-    uses: blacklanternsecurity/release-workflows/.github/workflows/dev-security.yml@12139195c6f35d8b4478bb8ec3df94aa275da01e # v1.1.0
+    uses: blacklanternsecurity/release-workflows/.github/workflows/dev-security.yml@3fe35ff9c43f61c98bd8c93182686b6be97d2759 # v1.3.0
